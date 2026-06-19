@@ -153,10 +153,12 @@ func (m *Model) applyEvent(e watcher.Event) {
 			m.log = append(m.log, ts+"  "+stText.Render(e.Message))
 		}
 		m.delayCounter = 0
+		m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
 
 	case watcher.EventForced:
 		m.delayCounter = 0
 		m.log = append(m.log, ts+"  "+stWarn.Render(e.Message))
+		m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
 
 	case watcher.EventError:
 		m.log = append(m.log, ts+"  "+stText.Render(e.Message))
