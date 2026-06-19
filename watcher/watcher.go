@@ -76,7 +76,7 @@ func New(cfg config.Config, apiKey string) *Watcher {
 }
 
 func (w *Watcher) Run() {
-	ticker := time.NewTicker(time.Duration(w.cfg.Interval) * time.Minute)
+	ticker := time.NewTicker(time.Duration(w.cfg.Interval * float64(time.Minute)))
 	defer ticker.Stop()
 
 	for range ticker.C {

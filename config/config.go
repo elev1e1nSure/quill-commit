@@ -8,16 +8,16 @@ import (
 )
 
 const (
-	DefaultInterval  = 10
+	DefaultInterval  = 10.0
 	DefaultMaxDelays = 3
 	DefaultModel     = "deepseek/deepseek-v4-flash"
 	FileName         = "quill.toml"
 )
 
 type Config struct {
-	Interval  int    `toml:"interval"`
-	MaxDelays int    `toml:"max_delays"`
-	Model     string `toml:"model"`
+	Interval  float64 `toml:"interval"`
+	MaxDelays int     `toml:"max_delays"`
+	Model     string  `toml:"model"`
 }
 
 func Default() Config {

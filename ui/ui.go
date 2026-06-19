@@ -56,7 +56,7 @@ func New(cfg config.Config, events <-chan watcher.Event) Model {
 	return Model{
 		cfg:       cfg,
 		events:    events,
-		nextCheck: time.Now().Add(time.Duration(cfg.Interval) * time.Minute),
+		nextCheck: time.Now().Add(time.Duration(cfg.Interval * float64(time.Minute))),
 	}
 }
 
@@ -134,7 +134,7 @@ func (m *Model) applyEvent(e watcher.Event) {
 
 	switch e.Kind {
 	case watcher.EventCheck:
-		m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval) * time.Minute)
+		m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
 		body = stDim.Render(e.Message)
 
 	case watcher.EventDecision:
@@ -190,6 +190,19 @@ func (m Model) View() string {
 	)
 }
 
+func formatInterval(minutes float64) string {
+	d := time.Duration(minutes * float64(time.Minute))
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	m := int(d.Minutes())
+	s := int(d.Seconds()) % 60
+	if s == 0 {
+		return fmt.Sprintf("%dm", m)
+	}
+	return fmt.Sprintf("%dm %ds", m, s)
+}
+
 func (m Model) renderStatus() string {
 	remaining := time.Until(m.nextCheck)
 	var nextStr string
@@ -210,7 +223,7 @@ func (m Model) renderStatus() string {
 	lbl := func(s string) string { return stDim.Render(fmt.Sprintf("%-12s", s)) }
 	rows := strings.Join([]string{
 		stTitle.Render("status"),
-		lbl("interval") + "  " + stText.Render(fmt.Sprintf("%dm", m.cfg.Interval)),
+		lbl("interval") + "  " + stText.Render(formatInterval(m.cfg.Interval)),
 		lbl("next check") + "  " + nextStr,
 		lbl("delays") + "  " + stText.Render(fmt.Sprintf("%d / %d", m.delayCounter, m.cfg.MaxDelays)),
 		lbl("last commit") + "  " + lastCommit,
