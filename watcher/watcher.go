@@ -108,6 +108,7 @@ func (w *Watcher) tick() {
 		w.emit(EventSkip, "diff empty, waiting")
 		w.prevDiff = ""
 		time.Sleep(2 * time.Second)
+		w.emit(EventCheck, "diff empty, done")
 		return
 	}
 

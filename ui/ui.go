@@ -132,7 +132,7 @@ func (m *Model) applyEvent(e watcher.Event) {
 	switch e.Kind {
 	case watcher.EventCheck:
 		m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
-		m.statusMsg = "checking diff..."
+		m.statusMsg = ""
 
 	case watcher.EventDecision:
 		if strings.Contains(e.Message, "commit:") {
