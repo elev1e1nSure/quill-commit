@@ -19,7 +19,6 @@ var (
 	stText    = lipgloss.NewStyle().Foreground(lipgloss.Color("#D4D4D4"))
 	stTitle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#6C9BD2")).Bold(true)
 	stAccent2 = lipgloss.NewStyle().Foreground(lipgloss.Color("#D4842A"))
-	stSuccess = lipgloss.NewStyle().Foreground(lipgloss.Color("#5FA862"))
 	stWarn    = lipgloss.NewStyle().Foreground(lipgloss.Color("#D4A82A"))
 	stErr     = lipgloss.NewStyle().Foreground(lipgloss.Color("#D44A4A"))
 
@@ -129,13 +128,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.statusLine = fmt.Sprintf("Idle... Checking diff in %ds", int(remaining.Seconds()))
 			}
-		case statusStabilizing:
-			remaining := time.Until(m.nextCheck)
-			if remaining <= 0 {
-				m.statusLine = "Diff changed, re-checking..."
-			} else {
-				m.statusLine = fmt.Sprintf("Diff changed, re-checking in %ds", int(remaining.Seconds()))
-			}
+
 		}
 
 	case eventMsg:
@@ -156,7 +149,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) applyEvent(e watcher.Event) {
-	ts := stDim.Render(e.Time.Format("15:04:05"))
+	ts := stDim.Render(e.Time.Format("15:04"))
 
 	switch e.Kind {
 	case watcher.EventCheck:
@@ -166,10 +159,9 @@ func (m *Model) applyEvent(e watcher.Event) {
 
 	case watcher.EventDecision:
 		if strings.Contains(e.Message, "commit:") {
-			m.log = append(m.log, ts+"  "+stSuccess.Render(e.Message))
+			// EventCommit handles the log entry
 		} else {
 			m.delayCounter++
-			m.log = append(m.log, ts+"  "+stWarn.Render(e.Message))
 			m.statusKind = statusDelaying
 			m.statusLine = e.Message
 		}
@@ -178,11 +170,12 @@ func (m *Model) applyEvent(e watcher.Event) {
 		hash := git.HeadHash()
 		if hash != "" {
 			m.lastCommit = stAccent2.Render(hash) + " " + stText.Render(e.Message)
+			m.log = append(m.log, ts+"  "+stAccent2.Render(hash)+" "+stText.Render(e.Message))
 		} else {
 			m.lastCommit = stText.Render(e.Message)
+			m.log = append(m.log, ts+"  "+stText.Render(e.Message))
 		}
 		m.delayCounter = 0
-		m.log = append(m.log, ts+"  "+stSuccess.Render("committed: "+e.Message))
 		m.statusKind = statusNone
 		m.statusLine = ""
 
@@ -208,13 +201,6 @@ func (m *Model) applyEvent(e watcher.Event) {
 			}
 		} else if strings.Contains(e.Message, "diff changed") {
 			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Stabilize * float64(time.Minute)))
-			m.statusKind = statusStabilizing
-			remaining := time.Until(m.nextCheck)
-			if remaining <= 0 {
-				m.statusLine = "Diff changed, re-checking..."
-			} else {
-				m.statusLine = fmt.Sprintf("Diff changed, re-checking in %ds", int(remaining.Seconds()))
-			}
 		} else {
 			m.log = append(m.log, ts+"  "+stDim.Render(e.Message))
 		}
