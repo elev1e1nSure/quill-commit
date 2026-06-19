@@ -15,14 +15,20 @@ quill-commit — a Go TUI tool that watches a git repo and auto-commits changes 
 ## Code style
 
 - Standard Go conventions: `gofmt`, `go vet`, `golangci-lint` clean.
-- Package layout per `docs/plan.md#Structure`: `config/`, `git/`, `ai/`, `watcher/`, `ui/`.
+- Package layout: `config/`, `git/`, `ai/`, `watcher/`, `ui/`.
 - Zero external logging libraries — `fmt.Fprint` to bubbletea model or stderr.
 - Errors are values, never panic.
 - HTTP client with sensible timeouts (10s connect, 30s read).
 
+## Docs
+
+- `docs/idea.md` — what this tool is and why it exists
+- `docs/technical.md` — implementation checklist (tasks with `[ ]` / `[x]`)
+- `docs/plan.md` — original full spec (authoritative reference for watcher logic, TUI colors, error handling)
+
 ## Rules
 
-- Read `docs/plan.md` before starting any feature work.
+- Read `docs/technical.md` and `docs/plan.md` before starting any feature work.
 - Only conventional commits: `type(scope): description` (types: feat, fix, chore, docs, style, refactor, perf, test, ci, build).
 - No emoji in code or commits.
 - Do not commit secrets, `.env` files, or `quill.toml` with real keys.
