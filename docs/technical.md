@@ -2,10 +2,10 @@
 
 ## Bootstrap
 
-- [ ] `go mod init quill-commit`
-- [ ] Add dependencies: bubbletea, lipgloss, bubbles, go-toml/v2
-- [ ] Scaffold package dirs: `config/`, `git/`, `ai/`, `watcher/`, `ui/`
-- [ ] Create `main.go` entry point (flag parsing, startup checks, launch TUI)
+- [x] `go mod init quill-commit`
+- [x] Add dependencies: bubbletea, lipgloss, bubbles, go-toml/v2
+- [x] Scaffold package dirs: `config/`, `git/`, `ai/`, `watcher/`, `ui/`
+- [x] Create `main.go` entry point (flag parsing, startup checks, launch TUI)
 
 ## config/
 
@@ -59,5 +59,5 @@
 - [x] `justfile` with `build`, `run`, `lint`, `test`, `tidy`
 - [x] `golangci-lint` installed
 - [x] `commitlint` + `husky` pre-commit and commit-msg hooks
-- [ ] `.golangci.yml` config (enable `errcheck`, `govet`, `staticcheck`)
-- [ ] `just build` produces working binary
+- [x] `.golangci.yml` config (enable `errcheck`, `govet`, `staticcheck`)
+- [x] `just build` produces working binary
