@@ -33,12 +33,13 @@ func printUsage() {
 		"  " + stFlag.Render("-preset") + " string    active (default), deep, aggressive",
 		"  " + stFlag.Render("-model") + " string    model override (overrides quill.toml)",
 		"  " + stFlag.Render("-interval") + " float    check interval in minutes (overrides quill.toml)",
+		"  " + stFlag.Render("-stabilize") + " float   stabilization re-check interval in minutes (overrides quill.toml)",
 		"  " + stFlag.Render("-max-delays") + " int     max delays before forced commit (overrides quill.toml)",
 		"",
 		stTitle.Render("Presets"),
-		"  " + stFlag.Render("active") + "      " + stMeta.Render("interval=2m  max_delays=3  — active coding sessions (default)"),
-		"  " + stFlag.Render("deep") + "        " + stMeta.Render("interval=5m  max_delays=2  — long focused work"),
-		"  " + stFlag.Render("aggressive") + "  " + stMeta.Render("interval=30s max_delays=4  — frequent commits"),
+		"  " + stFlag.Render("active") + "      " + stMeta.Render("interval=2m  stabilize=1m   max_delays=3  — active coding sessions (default)"),
+		"  " + stFlag.Render("deep") + "        " + stMeta.Render("interval=5m  stabilize=2.5m max_delays=2  — long focused work"),
+		"  " + stFlag.Render("aggressive") + "  " + stMeta.Render("interval=30s stabilize=15s  max_delays=4  — frequent commits"),
 		"",
 		stMeta.Render("alternatively set QUILL_API_KEY env var"),
 	}
@@ -52,6 +53,7 @@ func main() {
 	apiKeyFlag := flag.String("api-key", "", "OpenRouter API key (saved to credentials file for future runs)")
 	modelFlag := flag.String("model", "", "model override (overrides quill.toml)")
 	intervalFlag := flag.Float64("interval", 0, "check interval in minutes (overrides quill.toml)")
+	stabilizeFlag := flag.Float64("stabilize", 0, "stabilization re-check interval in minutes (overrides quill.toml)")
 	maxDelaysFlag := flag.Int("max-delays", 0, "max consecutive delays before forced commit (overrides quill.toml)")
 	presetFlag := flag.String("preset", "", "config preset: active (default), deep, aggressive")
 
@@ -110,6 +112,10 @@ func main() {
 	}
 	if *intervalFlag > 0 {
 		cfg.Interval = *intervalFlag
+		dirty = true
+	}
+	if *stabilizeFlag > 0 {
+		cfg.Stabilize = *stabilizeFlag
 		dirty = true
 	}
 	if *maxDelaysFlag > 0 {

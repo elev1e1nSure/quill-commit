@@ -9,6 +9,7 @@ import (
 
 const (
 	DefaultInterval  = 2.0
+	DefaultStabilize = DefaultInterval / 2
 	DefaultMaxDelays = 3
 	DefaultModel     = "deepseek/deepseek-v4-flash"
 	FileName         = "quill.toml"
@@ -16,14 +17,15 @@ const (
 
 type Preset struct {
 	Interval  float64
+	Stabilize float64
 	MaxDelays int
 	Desc      string
 }
 
 var Presets = map[string]Preset{
-	"active":     {Interval: 2, MaxDelays: 3, Desc: "check every 2m, stabilizes in 4m — good for active coding sessions"},
-	"deep":       {Interval: 5, MaxDelays: 2, Desc: "check every 5m, stabilizes in 10m — for long focused work"},
-	"aggressive": {Interval: 0.5, MaxDelays: 4, Desc: "check every 30s, stabilizes in 1m — frequent commits"},
+	"active":     {Interval: 2, Stabilize: 1, MaxDelays: 3, Desc: "check every 2m, re-check every 1m — active coding sessions"},
+	"deep":       {Interval: 5, Stabilize: 2.5, MaxDelays: 2, Desc: "check every 5m, re-check every 2.5m — long focused work"},
+	"aggressive": {Interval: 0.5, Stabilize: 0.25, MaxDelays: 4, Desc: "check every 30s, re-check every 15s — frequent commits"},
 }
 
 func ApplyPreset(cfg *Config, name string) bool {
@@ -32,12 +34,14 @@ func ApplyPreset(cfg *Config, name string) bool {
 		return false
 	}
 	cfg.Interval = p.Interval
+	cfg.Stabilize = p.Stabilize
 	cfg.MaxDelays = p.MaxDelays
 	return true
 }
 
 type Config struct {
 	Interval  float64 `toml:"interval"`
+	Stabilize float64 `toml:"stabilize"`
 	MaxDelays int     `toml:"max_delays"`
 	Model     string  `toml:"model"`
 }
@@ -45,6 +49,7 @@ type Config struct {
 func Default() Config {
 	return Config{
 		Interval:  DefaultInterval,
+		Stabilize: DefaultStabilize,
 		MaxDelays: DefaultMaxDelays,
 		Model:     DefaultModel,
 	}
@@ -66,6 +71,9 @@ func Load(path string) (Config, error) {
 
 	if cfg.Interval <= 0 {
 		cfg.Interval = DefaultInterval
+	}
+	if cfg.Stabilize <= 0 {
+		cfg.Stabilize = cfg.Interval / 2
 	}
 	if cfg.MaxDelays <= 0 {
 		cfg.MaxDelays = DefaultMaxDelays

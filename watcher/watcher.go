@@ -110,13 +110,36 @@ func (w *Watcher) tick() {
 		return
 	}
 
-	if diff != w.prevDiff {
-		w.emit(EventSkip, "diff changed, waiting for stabilization")
+	for diff != w.prevDiff {
+		w.emit(EventSkip, fmt.Sprintf("diff changed, re-checking in %s", formatDuration(w.cfg.Stabilize)))
 		w.prevDiff = diff
-		return
+		time.Sleep(time.Duration(w.cfg.Stabilize * float64(time.Minute)))
+		diff, err = w.git.Diff()
+		if err != nil {
+			w.emit(EventError, fmt.Sprintf("git diff: %s", err))
+			return
+		}
+		if diff == "" {
+			w.emit(EventSkip, "diff cleared during stabilization")
+			w.prevDiff = ""
+			return
+		}
 	}
 
 	w.delayLoop(diff)
+}
+
+func formatDuration(minutes float64) string {
+	d := time.Duration(minutes * float64(time.Minute))
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	m := int(d.Minutes())
+	s := int(d.Seconds()) % 60
+	if s == 0 {
+		return fmt.Sprintf("%dm", m)
+	}
+	return fmt.Sprintf("%dm%ds", m, s)
 }
 
 // delayLoop asks the model and handles commit: false delays without recursion.

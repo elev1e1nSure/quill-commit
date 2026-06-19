@@ -9,20 +9,20 @@ Commit discipline degrades under pressure. Developers either commit too rarely (
 ## Watcher logic
 
 ```
-tick
- ├─ diff empty?        → skip, wait for next tick
- ├─ diff changed?      → store new diff, wait for next tick
- └─ diff same as prev? → send to model
-                            ├─ commit: true  → git add -A && git commit
-                            └─ commit: false → sleep delay, retry model (not next tick)
-                                                └─ max_delays hit → force commit
+tick (every interval)
+ ├─ diff empty?   → skip, wait for next tick
+ └─ diff changed? → stabilization loop (sleep stabilize, re-check)
+      └─ diff stable (same two checks in a row)? → send to model
+              ├─ commit: true  → git add -A && git commit
+              └─ commit: false → sleep delay, retry model (not next tick)
+                                  └─ max_delays hit → force commit
 ```
 
 After any commit, delay counter and stored diff both reset.
 
 ## Key design decisions
 
-**Stabilization over immediacy.** The diff must be identical across two consecutive ticks before it's sent to the model. This avoids committing mid-edit when the change is still in flight.
+**Two-speed stabilization.** `interval` controls how often the watcher starts a fresh check when nothing is happening. Once a non-empty diff appears, the watcher switches to `stabilize` re-checks (typically `interval / 2`) until the diff is unchanged — only then does it send to the model. This matters most for the `aggressive` preset: a 30s interval with a 15s stabilize re-check catches the pause-between-bursts faster than waiting another 30s for the next ticker.
 
 **LLM as the only oracle.** No heuristics, no line-count thresholds. The model sees the raw diff and reasons about logical completeness. Invalid JSON from the model → fallback commit (`auto: fallback commit`).
 

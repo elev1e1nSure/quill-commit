@@ -223,7 +223,7 @@ func (m Model) renderStatus() string {
 	lbl := func(s string) string { return stDim.Render(fmt.Sprintf("%-12s", s)) }
 	rows := strings.Join([]string{
 		stTitle.Render("status"),
-		lbl("interval") + "  " + stText.Render(formatInterval(m.cfg.Interval)),
+		lbl("interval") + "  " + stText.Render(formatInterval(m.cfg.Interval)) + "  " + stDim.Render("stabilize "+formatInterval(m.cfg.Stabilize)),
 		lbl("next check") + "  " + nextStr,
 		lbl("delays") + "  " + stText.Render(fmt.Sprintf("%d / %d", m.delayCounter, m.cfg.MaxDelays)),
 		lbl("last commit") + "  " + lastCommit,

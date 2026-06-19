@@ -17,7 +17,7 @@ just build
 ## Usage
 
 ```
-quill-commit [--api-key <key>] [--model <id>] [--interval <minutes>] [--max-delays <n>]
+quill-commit [--api-key <key>] [--model <id>] [--interval <minutes>] [--stabilize <minutes>] [--max-delays <n>]
 ```
 
 Reads `quill.toml` from the current directory. Creates it with defaults on first run.
@@ -32,16 +32,17 @@ Reads `quill.toml` from the current directory. Creates it with defaults on first
 | `--api-key` | OpenRouter API key. Saved to credentials file on use. |
 | `--preset` | Apply a named config preset (saved to `quill.toml`). |
 | `--model` | Model override. Saved to `quill.toml`. |
-| `--interval` | Check interval in minutes. Supports decimals (`0.5` = 30s). Saved to `quill.toml`. |
+| `--interval` | How often to check for changes, in minutes. Supports decimals (`0.5` = 30s). Saved to `quill.toml`. |
+| `--stabilize` | Re-check interval during stabilization, in minutes. Defaults to `interval / 2`. Saved to `quill.toml`. |
 | `--max-delays` | Max consecutive delays before forced commit. Saved to `quill.toml`. |
 
 ## Presets
 
-| Preset | interval | max_delays | When to use |
-|--------|----------|------------|-------------|
-| `active` | 2m | 3 | Active coding sessions — default |
-| `deep` | 5m | 2 | Long focused work, big refactors |
-| `aggressive` | 30s | 4 | Fast feedback, frequent commits |
+| Preset | interval | stabilize | max_delays | When to use |
+|--------|----------|-----------|------------|-------------|
+| `active` | 2m | 1m | 3 | Active coding sessions — default |
+| `deep` | 5m | 2.5m | 2 | Long focused work, big refactors |
+| `aggressive` | 30s | 15s | 4 | Fast feedback, frequent commits |
 
 ```
 quill-commit --preset deep
@@ -54,7 +55,8 @@ Preset values are saved to `quill.toml` and persist across restarts.
 ## Config (`quill.toml`)
 
 ```toml
-interval = 10                          # how often to check, in minutes
+interval = 2                           # how often to check for changes, in minutes
+stabilize = 1                          # re-check interval during stabilization (default: interval / 2)
 max_delays = 3                         # forced commit after this many consecutive delays
 model = "deepseek/deepseek-v4-flash"   # default model via OpenRouter
 ```
@@ -62,13 +64,14 @@ model = "deepseek/deepseek-v4-flash"   # default model via OpenRouter
 ## How it works
 
 1. Every `interval` minutes, captures `git diff HEAD`
-2. Skips if diff is empty or changed since last tick (not stable yet)
-3. Once the diff is the same two ticks in a row, sends it to the model
-4. Model returns `commit: true/false`, a suggested delay, and a message
-5. On `commit: true` → `git add -A && git commit -m "<message>"`
-6. On `commit: false` → waits the suggested delay, retries
-7. After `max_delays` consecutive delays → force-commits with `auto: forced commit`
-8. Network errors don't count toward the delay counter
+2. Skips if diff is empty
+3. If diff changed — waits `stabilize` minutes and re-checks until it stops changing
+4. Once the diff is stable, sends it to the model
+5. Model returns `commit: true/false`, a suggested delay, and a message
+6. On `commit: true` → `git add -A && git commit -m "<message>"`
+7. On `commit: false` → waits the suggested delay, retries
+8. After `max_delays` consecutive delays → force-commits with `auto: forced commit`
+9. Network errors don't count toward the delay counter
 
 ## Docs
 

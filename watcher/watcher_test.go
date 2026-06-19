@@ -52,7 +52,7 @@ func (f *fakeAI) Ask(_, _, _ string) (ai.Decision, error) {
 }
 
 func newTestWatcher(g *fakeGit, a *fakeAI) *Watcher {
-	cfg := config.Config{Interval: 10, MaxDelays: 3, Model: "test"}
+	cfg := config.Config{Interval: 10, Stabilize: 0, MaxDelays: 3, Model: "test"}
 	w := New(cfg, "key")
 	w.git = g
 	w.ai = a
@@ -96,28 +96,14 @@ func TestTick_EmptyDiff_Skips(t *testing.T) {
 	}
 }
 
-func TestTick_DiffChanged_WaitsForStabilization(t *testing.T) {
-	g := &fakeGit{diffs: []string{"diff-a", "diff-b"}}
-	w := newTestWatcher(g, &fakeAI{})
-
-	w.tick() // diff-a, prevDiff="" → changed, store diff-a
-	w.tick() // diff-b, prevDiff="diff-a" → changed again, store diff-b
-
-	evs := collectEvents(w)
-	for _, e := range evs {
-		if e.Kind == EventCommit {
-			t.Fatal("should not commit when diff keeps changing")
-		}
-	}
-}
-
-func TestTick_StableDiff_Commits(t *testing.T) {
-	g := &fakeGit{diffs: []string{"diff-a", "diff-a"}}
+// Stabilization loop: diff changes once during re-check, then settles — commits with final diff.
+func TestTick_DiffChangingThenStable_Commits(t *testing.T) {
+	// Diff sequence: first check=diff-a, re-check=diff-b, re-check=diff-b (stable)
+	g := &fakeGit{diffs: []string{"diff-a", "diff-b", "diff-b"}}
 	a := &fakeAI{responses: []ai.Decision{{Commit: true, Message: "feat: done"}}}
 	w := newTestWatcher(g, a)
 
-	w.tick() // diff-a, prevDiff="" → changed, store
-	w.tick() // diff-a, prevDiff="diff-a" → stable → ask → commit
+	w.tick()
 
 	evs := collectEvents(w)
 	var committed bool
@@ -127,7 +113,31 @@ func TestTick_StableDiff_Commits(t *testing.T) {
 		}
 	}
 	if !committed {
-		t.Fatal("expected commit on stable diff")
+		t.Fatal("expected commit after stabilization")
+	}
+	if len(g.commits) != 1 || g.commits[0] != "feat: done" {
+		t.Fatalf("unexpected commits: %v", g.commits)
+	}
+}
+
+// Already-stable diff (prevDiff pre-set) commits on the first tick without looping.
+func TestTick_StableDiff_Commits(t *testing.T) {
+	g := &fakeGit{diffs: []string{"diff-a"}}
+	a := &fakeAI{responses: []ai.Decision{{Commit: true, Message: "feat: done"}}}
+	w := newTestWatcher(g, a)
+	w.prevDiff = "diff-a" // pre-stable: no re-check needed
+
+	w.tick()
+
+	evs := collectEvents(w)
+	var committed bool
+	for _, e := range evs {
+		if e.Kind == EventCommit {
+			committed = true
+		}
+	}
+	if !committed {
+		t.Fatal("expected commit on already-stable diff")
 	}
 	if len(g.commits) != 1 || g.commits[0] != "feat: done" {
 		t.Fatalf("unexpected commits: %v", g.commits)
