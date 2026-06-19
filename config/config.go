@@ -10,7 +10,7 @@ import (
 const (
 	DefaultInterval           = 2.0
 	DefaultStabilize          = DefaultInterval / 2
-	DefaultMaxDelays          = 3
+	DefaultMaxDelays          = 0
 	DefaultModel              = "deepseek/deepseek-v4-flash"
 	DefaultIncludeContext     = true
 	DefaultContextBudget      = 8000
@@ -86,7 +86,7 @@ func Load(path string) (Config, error) {
 	if cfg.Stabilize <= 0 {
 		cfg.Stabilize = cfg.Interval / 2
 	}
-	if cfg.MaxDelays <= 0 {
+	if cfg.MaxDelays < 0 {
 		cfg.MaxDelays = DefaultMaxDelays
 	}
 	if cfg.Model == "" {

@@ -260,9 +260,13 @@ func (w *Watcher) delayLoop(stableDiff string) {
 		}
 
 		w.delayCounter++
-		w.emit(EventDecision, fmt.Sprintf("model says wait %dm (delay %d/%d)", decision.Delay, w.delayCounter, w.cfg.MaxDelays))
+		if w.cfg.MaxDelays > 0 {
+			w.emit(EventDecision, fmt.Sprintf("model says wait %dm (delay %d/%d)", decision.Delay, w.delayCounter, w.cfg.MaxDelays))
+		} else {
+			w.emit(EventDecision, fmt.Sprintf("model says wait %dm (delay %d)", decision.Delay, w.delayCounter))
+		}
 
-		if w.delayCounter >= w.cfg.MaxDelays {
+		if w.cfg.MaxDelays > 0 && w.delayCounter >= w.cfg.MaxDelays {
 			w.emit(EventForced, "max delays reached, forcing commit")
 			w.doCommit("auto: forced commit")
 			return

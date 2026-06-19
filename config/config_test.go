@@ -95,7 +95,7 @@ func TestSaveAndLoad(t *testing.T) {
 
 func TestLoadDefaultsInvalidValues(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "quill.toml")
-	if err := os.WriteFile(tmp, []byte("interval = -1\nmax_delays = 0\nmodel = \"\""), 0644); err != nil {
+	if err := os.WriteFile(tmp, []byte("interval = -1\nmax_delays = -1\nmodel = \"\""), 0644); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
 	}
 	cfg, err := Load(tmp)
