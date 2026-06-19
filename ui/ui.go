@@ -164,6 +164,8 @@ func (m *Model) applyEvent(e watcher.Event) {
 	case watcher.EventSkip:
 		if strings.Contains(e.Message, "diff changed") {
 			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Stabilize * float64(time.Minute)))
+		} else if strings.Contains(e.Message, "diff empty") {
+			// only status, no log
 		} else {
 			m.log = append(m.log, ts+"  "+stText.Render(e.Message))
 		}
