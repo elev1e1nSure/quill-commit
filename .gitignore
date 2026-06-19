@@ -1,0 +1,29 @@
+# Binaries
+quill-commit.exe
+*.exe
+
+# Go
+vendor/
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config with secrets
+quill.toml
+.env
+.env.*
+
+# Logs
+*.log
+
+# Node
+node_modules/
