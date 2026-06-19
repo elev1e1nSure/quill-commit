@@ -4,8 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"quill-commit/config"
 	"quill-commit/credentials"
@@ -14,12 +16,53 @@ import (
 	"quill-commit/watcher"
 )
 
+var (
+	stTitle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#6C9BD2")).Bold(true)
+	stFlag    = lipgloss.NewStyle().Foreground(lipgloss.Color("#D4D4D4"))
+	stMeta    = lipgloss.NewStyle().Foreground(lipgloss.Color("#808080"))
+	stErr     = lipgloss.NewStyle().Foreground(lipgloss.Color("#D44A4A"))
+)
+
+func printUsage() {
+	exe := "quill-commit"
+	lines := []string{
+		stTitle.Render("Usage") + ": " + exe + " [options]",
+		"",
+		stTitle.Render("Options"),
+		"  " + stFlag.Render("-api-key") + " string    OpenRouter API key (saved for future runs)",
+		"  " + stFlag.Render("-model") + " string    model override (overrides quill.toml)",
+		"  " + stFlag.Render("-interval") + " float    check interval in minutes (overrides quill.toml)",
+		"  " + stFlag.Render("-max-delays") + " int     max delays before forced commit (overrides quill.toml)",
+		"",
+		stMeta.Render("alternatively set QUILL_API_KEY env var"),
+	}
+	fmt.Println(strings.Join(lines, "\n"))
+}
+
 func main() {
+	flag.CommandLine.Init(flag.CommandLine.Name(), flag.ContinueOnError)
+	flag.CommandLine.SetOutput(&strings.Builder{})
+
 	apiKeyFlag := flag.String("api-key", "", "OpenRouter API key (saved to credentials file for future runs)")
 	modelFlag := flag.String("model", "", "model override (overrides quill.toml)")
 	intervalFlag := flag.Float64("interval", 0, "check interval in minutes (overrides quill.toml)")
 	maxDelaysFlag := flag.Int("max-delays", 0, "max consecutive delays before forced commit (overrides quill.toml)")
-	flag.Parse()
+
+	if len(os.Args) == 1 {
+		printUsage()
+		os.Exit(0)
+	}
+
+	err := flag.CommandLine.Parse(os.Args[1:])
+	if err != nil {
+		if err == flag.ErrHelp {
+			printUsage()
+			os.Exit(0)
+		}
+		fmt.Fprintf(os.Stderr, "%s %s\n\n", stErr.Render("error:"), err.Error())
+		printUsage()
+		os.Exit(1)
+	}
 
 	apiKey := resolveAPIKey(*apiKeyFlag)
 	if apiKey == "" {
