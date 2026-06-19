@@ -40,6 +40,7 @@ type Model struct {
 	cfg          config.Config
 	events       <-chan watcher.Event
 	nextCheck    time.Time
+	statusMsg    string
 	delayCounter int
 	lastCommit   string
 	log          []string
@@ -131,16 +132,18 @@ func (m *Model) applyEvent(e watcher.Event) {
 	switch e.Kind {
 	case watcher.EventCheck:
 		m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
+		m.statusMsg = "checking diff..."
 
 	case watcher.EventDecision:
 		if strings.Contains(e.Message, "commit:") {
-			// EventCommit handles the log entry
+			m.statusMsg = "committing..."
 		} else {
 			m.delayCounter++
 			var delayMin int
 			if n, err := fmt.Sscanf(e.Message, "model says wait %dm", &delayMin); n == 1 && err == nil {
 				m.nextCheck = e.Time.Add(time.Duration(delayMin) * time.Minute)
 			}
+			m.statusMsg = e.Message
 		}
 
 	case watcher.EventCommit:
@@ -154,26 +157,32 @@ func (m *Model) applyEvent(e watcher.Event) {
 		}
 		m.delayCounter = 0
 		m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
+		m.statusMsg = ""
 
 	case watcher.EventForced:
 		m.delayCounter = 0
 		m.log = append(m.log, ts+"  "+stWarn.Render(e.Message))
 		m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
+		m.statusMsg = ""
 
 	case watcher.EventError:
 		m.log = append(m.log, ts+"  "+stText.Render(e.Message))
+		m.statusMsg = ""
 
 	case watcher.EventSkip:
 		if strings.Contains(e.Message, "diff changed") {
 			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Stabilize * float64(time.Minute)))
+			m.statusMsg = "stabilizing..."
 		} else if strings.Contains(e.Message, "diff empty") {
-			// only status, no log
+			m.statusMsg = "waiting for changes..."
 		} else {
 			m.log = append(m.log, ts+"  "+stText.Render(e.Message))
+			m.statusMsg = ""
 		}
 
 	case watcher.EventDelay:
 		m.log = append(m.log, ts+"  "+stText.Render(e.Message))
+		m.statusMsg = e.Message
 	}
 }
 
@@ -209,15 +218,19 @@ func formatInterval(minutes float64) string {
 }
 
 func (m Model) renderStatus() string {
-	remaining := time.Until(m.nextCheck)
 	var nextStr string
-	switch {
-	case remaining <= 0:
-		nextStr = stAccent2.Render("checking...")
-	case int(remaining.Minutes()) > 0:
-		nextStr = stText.Render(fmt.Sprintf("next check in %dm %ds", int(remaining.Minutes()), int(remaining.Seconds())%60))
-	default:
-		nextStr = stText.Render(fmt.Sprintf("next check in %ds", int(remaining.Seconds())))
+	if m.statusMsg != "" {
+		nextStr = stAccent2.Render(m.statusMsg)
+	} else {
+		remaining := time.Until(m.nextCheck)
+		switch {
+		case remaining <= 0:
+			nextStr = stAccent2.Render("checking...")
+		case int(remaining.Minutes()) > 0:
+			nextStr = stText.Render(fmt.Sprintf("next check in %dm %ds", int(remaining.Minutes()), int(remaining.Seconds())%60))
+		default:
+			nextStr = stText.Render(fmt.Sprintf("next check in %ds", int(remaining.Seconds())))
+		}
 	}
 
 	lastCommit := m.lastCommit
