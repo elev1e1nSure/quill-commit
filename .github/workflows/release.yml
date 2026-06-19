@@ -29,7 +29,10 @@ jobs:
           go run ./cmd/releasenotes $FLAG --from "$FROM" --to HEAD > release-notes.md
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      - name: Build Windows binary
+        run: GOOS=windows GOARCH=amd64 go build -o quill-commit-windows-amd64.exe .
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           body_path: release-notes.md
+          files: quill-commit-windows-amd64.exe
