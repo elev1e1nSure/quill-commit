@@ -37,23 +37,32 @@ type fakeAI struct {
 	responses []ai.Decision
 	respIdx   int
 	err       error
+	AskFunc   func(req ai.Request) (ai.Decision, ai.Usage, error)
 }
 
-func (f *fakeAI) Ask(_, _, _ string) (ai.Decision, error) {
+func (f *fakeAI) Ask(req ai.Request) (ai.Decision, ai.Usage, error) {
+	if f.AskFunc != nil {
+		return f.AskFunc(req)
+	}
 	if f.err != nil {
-		return ai.Decision{}, f.err
+		return ai.Decision{}, ai.Usage{}, f.err
 	}
+	if len(f.responses) == 0 {
+		return ai.Decision{}, ai.Usage{}, nil
+	}
+	var d ai.Decision
 	if f.respIdx >= len(f.responses) {
-		return f.responses[len(f.responses)-1], nil
+		d = f.responses[len(f.responses)-1]
+	} else {
+		d = f.responses[f.respIdx]
+		f.respIdx++
 	}
-	d := f.responses[f.respIdx]
-	f.respIdx++
-	return d, nil
+	return d, ai.Usage{}, nil
 }
 
 func newTestWatcher(g *fakeGit, a *fakeAI) *Watcher {
 	cfg := config.Config{Interval: 10, Stabilize: 0, MaxDelays: 3, Model: "test"}
-	w := New(cfg, "key")
+	w := New(cfg, "key", "")
 	w.git = g
 	w.ai = a
 	return w
@@ -213,5 +222,43 @@ func TestDelayLoop_DiffChangedDuringSleep_ResetsStabilization(t *testing.T) {
 	}
 	if w.delayCounter != 0 {
 		t.Fatalf("expected counter reset, got %d", w.delayCounter)
+	}
+}
+
+func TestWatcherSessionID(t *testing.T) {
+	cfg := config.Config{
+		Interval:       10,
+		Stabilize:      0,
+		MaxDelays:      3,
+		Model:          "test",
+		IncludeContext: true,
+		SessionID:      "explicit-id",
+	}
+
+	oldCap := ai.CacheCapabilityFn
+	ai.CacheCapabilityFn = func(model, apiKey string) (bool, error) {
+		return true, nil
+	}
+	defer func() { ai.CacheCapabilityFn = oldCap }()
+
+	var lastReq ai.Request
+	a := &fakeAI{
+		responses: []ai.Decision{{Commit: true, Message: "feat: commit"}},
+		AskFunc: func(req ai.Request) (ai.Decision, ai.Usage, error) {
+			lastReq = req
+			return ai.Decision{Commit: true, Message: "feat: commit"}, ai.Usage{}, nil
+		},
+	}
+	g := &fakeGit{diffs: []string{"diff-x"}}
+
+	w := New(cfg, "key", t.TempDir())
+	w.git = g
+	w.ai = a
+	w.prevDiff = "diff-x"
+
+	w.delayLoop("diff-x")
+
+	if lastReq.SessionID != "explicit-id" {
+		t.Errorf("expected Request.SessionID 'explicit-id', got %q", lastReq.SessionID)
 	}
 }

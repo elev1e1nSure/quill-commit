@@ -128,7 +128,13 @@ func main() {
 		}
 	}
 
-	w := watcher.New(cfg, apiKey)
+	repoRoot, err := git.RepoRoot()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error: get git repo root:", err)
+		os.Exit(1)
+	}
+
+	w := watcher.New(cfg, apiKey, repoRoot)
 	go w.Run()
 
 	p := tea.NewProgram(ui.New(cfg, w.Events), tea.WithAltScreen())

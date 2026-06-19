@@ -35,6 +35,7 @@ var (
 	openRouterURL                      = "https://openrouter.ai/api/v1/chat/completions"
 	openRouterModelsURL                = "https://openrouter.ai/api/v1/models"
 	cacheCapabilityTimeout            = dialTimeout
+	CacheCapabilityFn                  = CacheCapability
 )
 
 type Request struct {

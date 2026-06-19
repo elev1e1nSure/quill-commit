@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -172,5 +173,37 @@ func TestDiffEmpty(t *testing.T) {
 func TestAddNoError(t *testing.T) {
 	if err := Add(); err != nil {
 		t.Fatalf("Add() failed: %v", err)
+	}
+}
+
+func TestRepoRoot(t *testing.T) {
+	tempDir, cleanup := newTempRepo(t)
+	defer cleanup()
+
+	root, err := RepoRoot()
+	if err != nil {
+		t.Fatalf("RepoRoot failed: %v", err)
+	}
+	rootStat, err1 := os.Stat(root)
+	tempStat, err2 := os.Stat(tempDir)
+	if err1 != nil || err2 != nil || !os.SameFile(rootStat, tempStat) {
+		t.Errorf("RepoRoot %q does not match tempDir %q", root, tempDir)
+	}
+
+	subDir := filepath.Join(tempDir, "sub", "deep")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	if err := os.Chdir(subDir); err != nil {
+		t.Fatalf("Chdir failed: %v", err)
+	}
+
+	subRoot, err := RepoRoot()
+	if err != nil {
+		t.Fatalf("RepoRoot in subdir failed: %v", err)
+	}
+	subRootStat, err3 := os.Stat(subRoot)
+	if err3 != nil || !os.SameFile(subRootStat, tempStat) {
+		t.Errorf("sub RepoRoot %q does not match tempDir %q", subRoot, tempDir)
 	}
 }

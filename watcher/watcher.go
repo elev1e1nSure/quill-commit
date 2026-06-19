@@ -1,12 +1,15 @@
 package watcher
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"time"
 
 	"quill-commit/ai"
 	"quill-commit/config"
+	"quill-commit/context"
 	"quill-commit/git"
 )
 
@@ -49,19 +52,19 @@ type gitOps interface {
 }
 
 type aiOps interface {
-	Ask(diff, model, apiKey string) (ai.Decision, error)
+	Ask(req ai.Request) (ai.Decision, ai.Usage, error)
 }
 
 type realGit struct{}
 
-func (realGit) Diff() (string, error)        { return git.Diff() }
-func (realGit) Add() error                   { return git.Add() }
-func (realGit) Commit(message string) error  { return git.Commit(message) }
+func (realGit) Diff() (string, error)       { return git.Diff() }
+func (realGit) Add() error                  { return git.Add() }
+func (realGit) Commit(message string) error { return git.Commit(message) }
 
 type realAI struct{}
 
-func (realAI) Ask(diff, model, apiKey string) (ai.Decision, error) {
-	return ai.Ask(diff, model, apiKey)
+func (realAI) Ask(req ai.Request) (ai.Decision, ai.Usage, error) {
+	return ai.Ask(req)
 }
 
 type Watcher struct {
@@ -74,15 +77,61 @@ type Watcher struct {
 
 	prevDiff     string
 	delayCounter int
+
+	// Context fields
+	static        context.Static
+	staticBudget  int
+	fullBudget    int
+	sessionID     string
+	explicitCache bool
+	cacheMisses   int
 }
 
-func New(cfg config.Config, apiKey string) *Watcher {
+func New(cfg config.Config, apiKey string, repoRoot string) *Watcher {
+	var static context.Static
+	var sessionID string
+	var explicitCache bool
+	var staticBudget, fullBudget int
+
+	if cfg.IncludeContext {
+		var err error
+		static, err = context.BuildStatic(repoRoot)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "warn: context.BuildStatic:", err)
+		}
+
+		if cfg.SessionID != "" {
+			sessionID = cfg.SessionID
+		} else {
+			b := make([]byte, 16)
+			if _, err := rand.Read(b); err != nil {
+				fmt.Fprintln(os.Stderr, "warn: generate session_id:", err)
+			}
+			sessionID = hex.EncodeToString(b)
+		}
+
+		var capErr error
+		explicitCache, capErr = ai.CacheCapabilityFn(cfg.Model, apiKey)
+		if capErr != nil {
+			fmt.Fprintln(os.Stderr, "warn: CacheCapability:", capErr)
+			explicitCache = false
+		}
+
+		staticBudget = cfg.ContextBudget
+		fullBudget = cfg.ContextBudget
+	}
+
 	return &Watcher{
-		cfg:    cfg,
-		apiKey: apiKey,
-		Events: make(chan Event, 64),
-		git:    realGit{},
-		ai:     realAI{},
+		cfg:           cfg,
+		apiKey:        apiKey,
+		Events:        make(chan Event, 64),
+		git:           realGit{},
+		ai:            realAI{},
+		static:        static,
+		staticBudget:  staticBudget,
+		fullBudget:    fullBudget,
+		sessionID:     sessionID,
+		explicitCache: explicitCache,
 	}
 }
 
@@ -148,13 +197,56 @@ func formatDuration(minutes float64) string {
 // After each sleep it re-checks the diff; if it changed, stabilization resets.
 func (w *Watcher) delayLoop(stableDiff string) {
 	for {
-		decision, err := w.ai.Ask(stableDiff, w.cfg.Model, w.apiKey)
+		var sysPrompt string
+		var userPrompt string
+
+		if w.cfg.IncludeContext {
+			dyn, dynErr := context.BuildDynamic(w.cfg.RecentCommitsCount)
+			if dynErr != nil {
+				fmt.Fprintln(os.Stderr, "warn: context.BuildDynamic:", dynErr)
+			}
+			sysPrompt = ai.BasePrompt + "\n\n---\n\n" + context.RenderSystem(w.static, w.staticBudget)
+			userPrompt = context.RenderUser(dyn, stableDiff)
+		} else {
+			sysPrompt = ai.BasePrompt
+			userPrompt = stableDiff
+		}
+
+		req := ai.Request{
+			SystemPrompt:  sysPrompt,
+			UserPrompt:    userPrompt,
+			Model:         w.cfg.Model,
+			APIKey:        w.apiKey,
+			SessionID:     w.sessionID,
+			ExplicitCache: w.explicitCache,
+		}
+
+		decision, usage, err := w.ai.Ask(req)
 		if err != nil {
 			// network error: do not count toward delay counter; reset so next
 			// stabilization cycle starts clean
 			w.emit(EventError, fmt.Sprintf("ai error (skipping): %s", err))
 			w.delayCounter = 0
 			return
+		}
+
+		if w.cfg.IncludeContext {
+			if usage.CachedTokens > 0 {
+				if w.cacheMisses > 0 || w.staticBudget < w.fullBudget {
+					w.cacheMisses = 0
+					w.staticBudget = w.fullBudget
+					fmt.Fprintln(os.Stderr, "cache: recovered full budget")
+				}
+				fmt.Fprintf(os.Stderr, "cache: hit %d tok\n", usage.CachedTokens)
+			} else {
+				w.cacheMisses++
+				fmt.Fprintf(os.Stderr, "cache: miss (%d)\n", w.cacheMisses)
+				if w.cacheMisses >= 3 && w.staticBudget > 800 {
+					w.staticBudget = 800
+					w.cacheMisses = 0
+					fmt.Fprintln(os.Stderr, "cache: budget shrunk to 800 chars")
+				}
+			}
 		}
 
 		if decision.Commit {

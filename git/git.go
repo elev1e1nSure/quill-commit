@@ -128,3 +128,11 @@ func HeadHash() string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+func RepoRoot() (string, error) {
+	out, err := exec.Command("git", "rev-parse", "--show-toplevel").CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git repo-root: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
