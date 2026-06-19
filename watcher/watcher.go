@@ -77,36 +77,50 @@ func (w *Watcher) tick() {
 		return
 	}
 
-	// diff is stable — ask model
-	w.askAndAct(diff)
+	// diff is stable — enter delay/retry loop
+	w.delayLoop(diff)
 }
 
-func (w *Watcher) askAndAct(diff string) {
-	decision, err := ai.Ask(diff, w.cfg.Model, w.apiKey)
-	if err != nil {
-		w.emit(EventError, fmt.Sprintf("ai error (skipping): %s", err))
-		// network error: do not count toward delay counter
-		return
+// delayLoop asks the model and handles commit: false delays without recursion.
+// After each sleep it re-checks the diff; if it changed, stabilization resets.
+func (w *Watcher) delayLoop(stableDiff string) {
+	for {
+		decision, err := ai.Ask(stableDiff, w.cfg.Model, w.apiKey)
+		if err != nil {
+			// network error: skip, do not count toward delay counter
+			w.emit(EventError, fmt.Sprintf("ai error (skipping): %s", err))
+			return
+		}
+
+		if decision.Commit {
+			w.emit(EventDecision, fmt.Sprintf("model says commit: %s", decision.Message))
+			w.doCommit(decision.Message)
+			return
+		}
+
+		w.delayCounter++
+		w.emit(EventDecision, fmt.Sprintf("model says wait %dm (delay %d/%d)", decision.Delay, w.delayCounter, w.cfg.MaxDelays))
+
+		if w.delayCounter >= w.cfg.MaxDelays {
+			w.emit(EventForced, "max delays reached, forcing commit")
+			w.doCommit("auto: forced commit")
+			return
+		}
+
+		time.Sleep(time.Duration(decision.Delay) * time.Minute)
+
+		// re-check diff after sleep: if code changed, stabilization resets
+		currentDiff, err := git.Diff()
+		if err != nil {
+			w.emit(EventError, fmt.Sprintf("git diff after delay: %s", err))
+			return
+		}
+		if currentDiff != stableDiff {
+			w.emit(EventSkip, "diff changed during delay, resetting stabilization")
+			w.prevDiff = currentDiff
+			return
+		}
 	}
-
-	if decision.Commit {
-		w.emit(EventDecision, fmt.Sprintf("model says commit: %s", decision.Message))
-		w.doCommit(decision.Message)
-		return
-	}
-
-	w.delayCounter++
-	w.emit(EventDecision, fmt.Sprintf("model says wait %dm (delay %d/%d)", decision.Delay, w.delayCounter, w.cfg.MaxDelays))
-
-	if w.delayCounter >= w.cfg.MaxDelays {
-		w.emit(EventForced, "max delays reached, forcing commit")
-		w.doCommit("auto: forced commit")
-		return
-	}
-
-	// wait delay minutes, then retry model (not the next tick)
-	time.Sleep(time.Duration(decision.Delay) * time.Minute)
-	w.askAndAct(diff)
 }
 
 func (w *Watcher) doCommit(message string) {
