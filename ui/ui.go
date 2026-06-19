@@ -20,8 +20,6 @@ var (
 	stTitle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#6C9BD2")).Bold(true)
 	stAccent2 = lipgloss.NewStyle().Foreground(lipgloss.Color("#D4842A"))
 	stWarn    = lipgloss.NewStyle().Foreground(lipgloss.Color("#D4A82A"))
-	stErr     = lipgloss.NewStyle().Foreground(lipgloss.Color("#D44A4A"))
-
 	boxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#6C9BD2")).
@@ -186,7 +184,7 @@ func (m *Model) applyEvent(e watcher.Event) {
 		m.statusLine = ""
 
 	case watcher.EventError:
-		m.log = append(m.log, ts+"  "+stErr.Render(e.Message))
+		m.log = append(m.log, ts+"  "+stText.Render(e.Message))
 		m.statusKind = statusNone
 		m.statusLine = ""
 
@@ -202,11 +200,11 @@ func (m *Model) applyEvent(e watcher.Event) {
 		} else if strings.Contains(e.Message, "diff changed") {
 			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Stabilize * float64(time.Minute)))
 		} else {
-			m.log = append(m.log, ts+"  "+stDim.Render(e.Message))
+			m.log = append(m.log, ts+"  "+stText.Render(e.Message))
 		}
 
 	case watcher.EventDelay:
-		m.log = append(m.log, ts+"  "+stDim.Render(e.Message))
+		m.log = append(m.log, ts+"  "+stText.Render(e.Message))
 	}
 }
 
@@ -248,9 +246,9 @@ func (m Model) renderStatus() string {
 	case remaining <= 0:
 		nextStr = stAccent2.Render("checking...")
 	case int(remaining.Minutes()) > 0:
-		nextStr = stText.Render(fmt.Sprintf("in %dm %ds", int(remaining.Minutes()), int(remaining.Seconds())%60))
+		nextStr = stText.Render(fmt.Sprintf("next check in %dm %ds", int(remaining.Minutes()), int(remaining.Seconds())%60))
 	default:
-		nextStr = stText.Render(fmt.Sprintf("in %ds", int(remaining.Seconds())))
+		nextStr = stText.Render(fmt.Sprintf("next check in %ds", int(remaining.Seconds())))
 	}
 
 	lastCommit := m.lastCommit
@@ -262,7 +260,7 @@ func (m Model) renderStatus() string {
 	rows := strings.Join([]string{
 		stTitle.Render("status"),
 		lbl("interval") + "  " + stText.Render(formatInterval(m.cfg.Interval)) + "  " + stDim.Render("stabilize "+formatInterval(m.cfg.Stabilize)),
-		lbl("next check") + "  " + nextStr,
+		lbl("status") + "  " + nextStr,
 		lbl("delays") + "  " + stText.Render(fmt.Sprintf("%d / %d", m.delayCounter, m.cfg.MaxDelays)),
 		lbl("last commit") + "  " + lastCommit,
 	}, "\n")
