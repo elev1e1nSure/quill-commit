@@ -23,7 +23,9 @@ func Add() error {
 }
 
 func Commit(message string) error {
-	out, err := exec.Command("git", "commit", "-m", message).CombinedOutput()
+	cmd := exec.Command("git", "commit", "-F", "-")
+	cmd.Stdin = strings.NewReader(message)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}
