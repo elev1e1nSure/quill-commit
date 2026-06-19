@@ -41,3 +41,7 @@ Config in `.golangci.yml`. Enabled linters: `errcheck`, `govet`, `staticcheck`.
 ## Testing
 
 Each package has its own `_test.go`. The watcher uses interfaces (`gitOps`, `aiOps`) for dependency injection so git and AI calls can be mocked without spawning real processes.
+
+The `git/` package contains low-level helpers (`Diff`, `Add`, `Commit`, `IsRepo`, `HeadHash`, `RecentCommits`, `StatusShort`, `LsFiles`, `RepoRoot`) that interact with git via subprocesses. Tests for these are performed using temporary git repositories.
+
+The `context/` package builds the static and dynamic project prompts. Its tests inject stub functions (like `lsFilesFunc`, `recentCommitsFunc`, and `statusShortFunc`) to test prompt formatting and budget truncation logic without subprocess overhead.

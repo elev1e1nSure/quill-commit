@@ -33,19 +33,19 @@ const Conventions = `Commit message rules:
 - Entire message must be under 100 characters
 - Example: fix(ai): trim whitespace from model response`
 
-// Package-private variables for testing injection
+// Exported variables for testing injection
 var (
-	lsFilesFunc       = git.LsFiles
-	recentCommitsFunc = git.RecentCommits
-	statusShortFunc   = git.StatusShort
+	LsFilesFunc       = git.LsFiles
+	RecentCommitsFunc = git.RecentCommits
+	StatusShortFunc   = git.StatusShort
 )
 
 func BuildStatic(repoRoot string) (Static, error) {
 	var s Static
 	s.Conventions = Conventions
 
-	// 1. Packages from lsFilesFunc
-	filesStr, err := lsFilesFunc()
+	// 1. Packages from LsFilesFunc
+	filesStr, err := LsFilesFunc()
 	if err != nil {
 		return s, fmt.Errorf("git ls-files: %w", err)
 	}
@@ -127,14 +127,14 @@ func BuildDynamic(commitsN int) (Dynamic, error) {
 	var d Dynamic
 	var errs []error
 
-	commits, err := recentCommitsFunc(commitsN)
+	commits, err := RecentCommitsFunc(commitsN)
 	if err != nil {
 		errs = append(errs, err)
 	} else {
 		d.RecentCommits = commits
 	}
 
-	status, err := statusShortFunc()
+	status, err := StatusShortFunc()
 	if err != nil {
 		errs = append(errs, err)
 	} else {

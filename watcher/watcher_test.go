@@ -2,10 +2,14 @@ package watcher
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"quill-commit/ai"
 	"quill-commit/config"
+	"quill-commit/context"
 )
 
 // --- fakes ---
@@ -262,3 +266,258 @@ func TestWatcherSessionID(t *testing.T) {
 		t.Errorf("expected Request.SessionID 'explicit-id', got %q", lastReq.SessionID)
 	}
 }
+
+func TestWatcher_IncludeContext_HappyPath(t *testing.T) {
+	cfg := config.Config{
+		Interval:       10,
+		Stabilize:      0,
+		MaxDelays:      3,
+		Model:          "test-model",
+		IncludeContext: true,
+		ContextBudget:  8000,
+	}
+
+	// Stub out CacheCapability
+	oldCap := ai.CacheCapabilityFn
+	ai.CacheCapabilityFn = func(model, apiKey string) (bool, error) {
+		return true, nil
+	}
+	defer func() { ai.CacheCapabilityFn = oldCap }()
+
+	// Stub out LsFilesFunc to avoid git execution in BuildStatic
+	oldLs := context.LsFilesFunc
+	context.LsFilesFunc = func() (string, error) {
+		return "pkg/pkg.go\n", nil
+	}
+	defer func() { context.LsFilesFunc = oldLs }()
+
+	// Create temp dir and mock CLAUDE.md
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "CLAUDE.md"), []byte("## Project\nTest Project\n"), 0644); err != nil {
+		t.Fatalf("failed to write CLAUDE.md: %v", err)
+	}
+
+	var lastReq ai.Request
+	a := &fakeAI{
+		responses: []ai.Decision{{Commit: true, Message: "feat: commit"}},
+		AskFunc: func(req ai.Request) (ai.Decision, ai.Usage, error) {
+			lastReq = req
+			return ai.Decision{Commit: true, Message: "feat: commit"}, ai.Usage{PromptTokens: 100}, nil
+		},
+	}
+	g := &fakeGit{diffs: []string{"diff-x"}}
+
+	w := New(cfg, "key", tmpDir)
+	w.git = g
+	w.ai = a
+	w.prevDiff = "diff-x"
+
+	w.tick()
+
+	if lastReq.SessionID == "" {
+		t.Error("expected non-empty SessionID")
+	}
+	if !lastReq.ExplicitCache {
+		t.Error("expected ExplicitCache to be true")
+	}
+	if !strings.Contains(lastReq.SystemPrompt, "Test Project") {
+		t.Errorf("expected SystemPrompt to contain static context, got %q", lastReq.SystemPrompt)
+	}
+	if !strings.Contains(lastReq.SystemPrompt, "pkg") {
+		t.Errorf("expected SystemPrompt to contain package pkg, got %q", lastReq.SystemPrompt)
+	}
+}
+
+func TestWatcher_CacheMissesState(t *testing.T) {
+	cfg := config.Config{
+		Interval:       10,
+		Stabilize:      0,
+		MaxDelays:      5,
+		Model:          "test-model",
+		IncludeContext: true,
+		ContextBudget:  8000,
+	}
+
+	oldCap := ai.CacheCapabilityFn
+	ai.CacheCapabilityFn = func(model, apiKey string) (bool, error) { return true, nil }
+	defer func() { ai.CacheCapabilityFn = oldCap }()
+
+	oldLs := context.LsFilesFunc
+	context.LsFilesFunc = func() (string, error) { return "", nil }
+	defer func() { context.LsFilesFunc = oldLs }()
+
+	tmpDir := t.TempDir()
+	shortProject := strings.Repeat("A", 100)
+	longStack := strings.Repeat("B", 1000)
+	content := "## Project\n" + shortProject + "\n\n## Stack\n" + longStack + "\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, "CLAUDE.md"), []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write CLAUDE.md: %v", err)
+	}
+
+	var requests []ai.Request
+	a := &fakeAI{
+		AskFunc: func(req ai.Request) (ai.Decision, ai.Usage, error) {
+			requests = append(requests, req)
+			// Request indices:
+			// 0, 1, 2: CachedTokens = 0 (misses). 3rd miss triggers budget shrink to 800
+			// 3: 4th request has shrunk budget. Returns CachedTokens = 100 (hit) -> triggers budget restore
+			// 4: 5th request has full budget restored.
+			var cached int
+			if len(requests) > 3 {
+				cached = 100
+			}
+			return ai.Decision{Commit: false, Delay: 0}, ai.Usage{PromptTokens: 200, CachedTokens: cached}, nil
+		},
+	}
+	g := &fakeGit{diffs: []string{"diff-x"}}
+
+	w := New(cfg, "key", tmpDir)
+	w.git = g
+	w.ai = a
+	w.prevDiff = "diff-x"
+
+	w.tick()
+
+	if len(requests) != 5 {
+		t.Fatalf("expected 5 requests in a single tick delayLoop, got %d", len(requests))
+	}
+
+	// 1st request should be full size
+	if len(requests[0].SystemPrompt) < 1200 {
+		t.Errorf("expected long 1st request, got len %d", len(requests[0].SystemPrompt))
+	}
+
+	// 4th request (index 3) must be shrunk because we had 3 misses
+	if len(requests[3].SystemPrompt) > 1040 {
+		t.Errorf("expected shrunk 4th request, got len %d", len(requests[3].SystemPrompt))
+	}
+
+	// 5th request (index 4) should be restored to full because 4th request was a hit
+	if len(requests[4].SystemPrompt) < 1200 {
+		t.Errorf("expected restored 5th request, got len %d", len(requests[4].SystemPrompt))
+	}
+}
+
+func TestWatcher_IncludeContext_False(t *testing.T) {
+	cfg := config.Config{
+		Interval:       10,
+		Stabilize:      0,
+		MaxDelays:      3,
+		Model:          "test-model",
+		IncludeContext: false,
+	}
+
+	var lastReq ai.Request
+	a := &fakeAI{
+		responses: []ai.Decision{{Commit: true, Message: "feat: commit"}},
+		AskFunc: func(req ai.Request) (ai.Decision, ai.Usage, error) {
+			lastReq = req
+			return ai.Decision{Commit: true, Message: "feat: commit"}, ai.Usage{}, nil
+		},
+	}
+	g := &fakeGit{diffs: []string{"diff-x"}}
+
+	w := New(cfg, "key", "")
+	w.git = g
+	w.ai = a
+	w.prevDiff = "diff-x"
+
+	w.tick()
+
+	if lastReq.SessionID != "" {
+		t.Errorf("expected empty SessionID when IncludeContext is false, got %q", lastReq.SessionID)
+	}
+	if lastReq.SystemPrompt != ai.BasePrompt {
+		t.Errorf("expected SystemPrompt to be BasePrompt, got %q", lastReq.SystemPrompt)
+	}
+	if lastReq.UserPrompt != "diff-x" {
+		t.Errorf("expected UserPrompt to be diff-x, got %q", lastReq.UserPrompt)
+	}
+}
+
+func TestWatcher_BuildDynamic_Fail(t *testing.T) {
+	cfg := config.Config{
+		Interval:       10,
+		Stabilize:      0,
+		MaxDelays:      3,
+		Model:          "test-model",
+		IncludeContext: true,
+	}
+
+	oldCap := ai.CacheCapabilityFn
+	ai.CacheCapabilityFn = func(model, apiKey string) (bool, error) { return true, nil }
+	defer func() { ai.CacheCapabilityFn = oldCap }()
+
+	oldLs := context.LsFilesFunc
+	context.LsFilesFunc = func() (string, error) { return "", nil }
+	defer func() { context.LsFilesFunc = oldLs }()
+
+	// Inject failing BuildDynamic helpers
+	oldRecent := context.RecentCommitsFunc
+	oldStatus := context.StatusShortFunc
+	context.RecentCommitsFunc = func(n int) (string, error) {
+		return "", errors.New("recent commits error")
+	}
+	context.StatusShortFunc = func() (string, error) {
+		return "", errors.New("status short error")
+	}
+	defer func() {
+		context.RecentCommitsFunc = oldRecent
+		context.StatusShortFunc = oldStatus
+	}()
+
+	var called bool
+	a := &fakeAI{
+		responses: []ai.Decision{{Commit: true, Message: "feat: commit"}},
+		AskFunc: func(req ai.Request) (ai.Decision, ai.Usage, error) {
+			called = true
+			return ai.Decision{Commit: true, Message: "feat: commit"}, ai.Usage{}, nil
+		},
+	}
+	g := &fakeGit{diffs: []string{"diff-x"}}
+
+	w := New(cfg, "key", t.TempDir())
+	w.git = g
+	w.ai = a
+	w.prevDiff = "diff-x"
+
+	w.tick()
+
+	if !called {
+		t.Error("expected Ask to be called even if BuildDynamic fails")
+	}
+}
+
+func TestWatcher_BuildStatic_Fail(t *testing.T) {
+	cfg := config.Config{
+		Interval:       10,
+		Stabilize:      0,
+		MaxDelays:      3,
+		Model:          "test-model",
+		IncludeContext: true,
+	}
+
+	oldCap := ai.CacheCapabilityFn
+	ai.CacheCapabilityFn = func(model, apiKey string) (bool, error) { return true, nil }
+	defer func() { ai.CacheCapabilityFn = oldCap }()
+
+	// Inject failing BuildStatic helper
+	oldLs := context.LsFilesFunc
+	context.LsFilesFunc = func() (string, error) {
+		return "", errors.New("ls-files error")
+	}
+	defer func() { context.LsFilesFunc = oldLs }()
+
+	// watcher.New should not panic even if BuildStatic fails
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("New panicked on BuildStatic error: %v", r)
+		}
+	}()
+
+	w := New(cfg, "key", t.TempDir())
+	if w.static.Project != "" || len(w.static.Packages) != 0 {
+		t.Error("expected empty Static context on failure")
+	}
+}
+

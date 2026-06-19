@@ -36,12 +36,42 @@ After any commit, delay counter and stored diff both reset.
 
 ```
 config/    Config struct, quill.toml read/write
-git/       Diff, Add, Commit, IsRepo, HeadHash
-ai/        OpenRouter request, Decision struct, fallback
-watcher/   Ticker, stabilization, delay loop, event emission
+git/       Diff, Add, Commit, IsRepo, HeadHash, RecentCommits, StatusShort, LsFiles, RepoRoot
+context/   BuildStatic, BuildDynamic, RenderSystem, RenderUser, Hash
+ai/        OpenRouter request, Decision struct, fallback, CacheCapability
+watcher/   Ticker, stabilization, delay loop, event emission, context/caching integration
 ui/        Bubbletea TUI — Status block + Log block
 main.go    Flag parsing, startup checks, wires everything together
 ```
+
+## Project context and prompt caching
+
+To make commit decisions more accurate, `quill-commit` constructs a project context that is sent to the LLM. It supports prompt caching to minimize costs and latency.
+
+### Context Types
+- **Static Context**: Extracted once at startup.
+  - Project description & Stack: Loaded from `CLAUDE.md`, falling back to `README.md`, then `AGENTS.md`.
+  - Packages list: Top-level directories retrieved from `git ls-files`, sorted lexically.
+  - Conventions: Hardcoded Conventional Commits guidelines.
+- **Dynamic Context**: Re-evaluated on every check.
+  - Recent commits: A list of the latest `n` commit messages (default 10).
+  - Changed files: Brief status of untracked and modified files (`git status --short`).
+
+### Request Shape
+- **System Prompt**: Built as `BasePrompt + "\n\n---\n\n" + RenderSystem(static, budget)`.
+- **User Prompt**: Built as `RenderUser(dynamic) + "\n\n" + stableDiff`.
+- **Session ID**: Generated per-run (or overridden in TOML) and sent to OpenRouter to enable sticky routing, which triggers provider-side prompt caching.
+
+### Cache Capability & Miss Budget
+- At startup, `quill-commit` probes `GET https://openrouter.ai/api/v1/models/{model}` to verify if it supports the `cache_control` parameter.
+- If supported, `ExplicitCache` is enabled, inserting `cache_control: {type: "ephemeral"}` blocks into the system message.
+- To prevent runaway costs on continuous cache misses, the watcher tracks misses:
+  - If 3 consecutive cache misses occur, the static context budget shrinks to 800 characters.
+  - As soon as a cache hit is registered, the budget is restored to its full configured value.
+
+### Failure Modes & Degradation
+- If `BuildStatic` or `BuildDynamic` fails, the system logs a warning to stderr and degrades gracefully (e.g. omitting the missing context sections or continuing with partial context).
+- If the `CacheCapability` probe fails, it defaults to disabling explicit caching without crashing.
 
 ## TUI events
 
