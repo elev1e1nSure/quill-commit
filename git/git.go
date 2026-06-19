@@ -31,3 +31,11 @@ func Commit(message string) error {
 func IsRepo() bool {
 	return exec.Command("git", "rev-parse", "--git-dir").Run() == nil
 }
+
+func HeadHash() string {
+	out, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
