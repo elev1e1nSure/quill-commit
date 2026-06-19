@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -42,6 +43,46 @@ func Diff() (string, error) {
 		s += b.String()
 	}
 	return s, nil
+}
+
+func RecentCommits(n int) (string, error) {
+	if n <= 0 {
+		return "", nil
+	}
+	args := fmt.Sprintf("-%d", n)
+	out, err := exec.Command("git", "log", "--oneline", args).CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(out), "does not have any commits") {
+			return "", nil
+		}
+		return "", fmt.Errorf("git log: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func StatusShort() (string, error) {
+	out, err := exec.Command("git", "status", "--short").CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git status: %w", err)
+	}
+	s := strings.TrimSpace(string(out))
+	if s == "" {
+		return "", nil
+	}
+	return s, nil
+}
+
+func LsFiles() (string, error) {
+	out, err := exec.Command("git", "ls-files").CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git ls-files: %w", err)
+	}
+	files := strings.Split(strings.TrimSuffix(string(out), "\n"), "\n")
+	if len(files) == 1 && files[0] == "" {
+		return "", nil
+	}
+	sort.Strings(files)
+	return strings.Join(files, "\n"), nil
 }
 
 // isBinary checks if data looks binary (null byte in first 8k).
