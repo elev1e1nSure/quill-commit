@@ -21,10 +21,10 @@
 
 ## ai/
 
-- [ ] `Decision` struct: `Commit bool`, `Delay int`, `Message string`
-- [ ] `Ask(diff, model, apiKey string) (Decision, error)` — POST to OpenRouter
-- [ ] HTTP client with 10s dial timeout, 30s response timeout
-- [ ] Parse JSON response; invalid JSON → return `Decision{Commit: true, Message: "auto: fallback commit"}`
+- [x] `Decision` struct: `Commit bool`, `Delay int`, `Message string`
+- [x] `Ask(diff, model, apiKey string) (Decision, error)` — POST to OpenRouter
+- [x] HTTP client with 10s dial timeout, 30s response timeout
+- [x] Parse JSON response; invalid JSON → return `Decision{Commit: true, Message: "auto: fallback commit"}`
 
 ## watcher/
 
@@ -75,3 +75,4 @@
 - [x] ~~`.golangci.yml` config~~
 - [x] ~~`just build` produces working binary~~
 - [x] ~~`git Diff()`, `Add()`, `Commit()`, `IsRepo()`~~
+- [x] ~~`ai Decision` struct, `Ask()`, fallback~~
