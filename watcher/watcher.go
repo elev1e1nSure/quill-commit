@@ -18,6 +18,7 @@ const (
 	EventForced
 	EventError
 	EventSkip
+	EventDelay
 )
 
 type Event struct {
@@ -135,6 +136,7 @@ func (w *Watcher) delayLoop(stableDiff string) {
 			return
 		}
 
+		w.emit(EventDelay, fmt.Sprintf("sleeping %dm before retry", decision.Delay))
 		time.Sleep(time.Duration(decision.Delay) * time.Minute)
 
 		currentDiff, err := w.git.Diff()

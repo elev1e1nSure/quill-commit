@@ -69,7 +69,13 @@ func secondTick() tea.Cmd {
 }
 
 func listenEvent(ch <-chan watcher.Event) tea.Cmd {
-	return func() tea.Msg { return eventMsg(<-ch) }
+	return func() tea.Msg {
+		e, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return eventMsg(e)
+	}
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -157,6 +163,9 @@ func (m *Model) applyEvent(e watcher.Event) {
 		body = stErr.Render(e.Message)
 
 	case watcher.EventSkip:
+		body = stDim.Render(e.Message)
+
+	case watcher.EventDelay:
 		body = stDim.Render(e.Message)
 	}
 

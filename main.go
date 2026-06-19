@@ -28,20 +28,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	_, created, err := config.EnsureDefault(config.FileName)
+	cfg, created, err := config.EnsureDefault(config.FileName)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error creating config:", err)
 		os.Exit(1)
 	}
 	if created {
-		fmt.Printf("created %s with defaults — edit it to adjust interval/max_delays/model\n", config.FileName)
-		os.Exit(0)
-	}
-
-	cfg, err := config.Load(config.FileName)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error loading config:", err)
-		os.Exit(1)
+		fmt.Printf("created %s with defaults\n", config.FileName)
+	} else {
+		cfg, err = config.Load(config.FileName)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error loading config:", err)
+			os.Exit(1)
+		}
 	}
 
 	if *model != "" {

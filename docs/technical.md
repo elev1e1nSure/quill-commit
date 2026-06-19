@@ -38,21 +38,21 @@
 
 ## ui/
 
-- [ ] Bubbletea `Model` with `Status` and `Log` blocks
-- [ ] Status block: interval, time to next check, delay counter, last commit hash+message
-- [ ] Log block: timestamped entries (check, model decision, commit, error)
-- [ ] Lipgloss styles per color spec (accent1 `#6C9BD2`, accent2 `#D4842A`, text `#D4D4D4`, dim `#808080`, success `#5FA862`, warn `#D4A82A`, error `#D44A4A`)
-- [ ] Receive watcher events via channel, append to log, re-render
-- [ ] Verbose block: reserved in layout, hidden (no toggle in MVP)
+- [x] Bubbletea `Model` with `Status` and `Log` blocks
+- [x] Status block: interval, time to next check, delay counter, last commit hash+message
+- [x] Log block: timestamped entries (check, model decision, commit, error)
+- [x] Lipgloss styles per color spec (accent1 `#6C9BD2`, accent2 `#D4842A`, text `#D4D4D4`, dim `#808080`, success `#5FA862`, warn `#D4A82A`, error `#D44A4A`)
+- [x] Receive watcher events via channel, append to log, re-render
+- [x] Verbose block: reserved in layout, hidden (no toggle in MVP)
 
 ## main.go
 
-- [ ] Parse `--api-key` and `--model` flags
-- [ ] Validate: missing `--api-key` → exit with error
-- [ ] Load/create config
-- [ ] Run startup checks (git repo)
-- [ ] Start watcher in goroutine
-- [ ] Start bubbletea program, block until quit
+- [x] Parse `--api-key` and `--model` flags
+- [x] Validate: missing `--api-key` → exit with error
+- [x] Load/create config
+- [x] Run startup checks (git repo)
+- [x] Start watcher in goroutine
+- [x] Start bubbletea program, block until quit
 
 ## Tooling
 
