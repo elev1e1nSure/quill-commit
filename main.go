@@ -30,17 +30,11 @@ func main() {
 
 	cfg, created, err := config.EnsureDefault(config.FileName)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error creating config:", err)
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 	if created {
 		fmt.Printf("created %s with defaults\n", config.FileName)
-	} else {
-		cfg, err = config.Load(config.FileName)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "error loading config:", err)
-			os.Exit(1)
-		}
 	}
 
 	if *model != "" {
