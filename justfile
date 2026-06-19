@@ -38,3 +38,11 @@ tidy:
 commit:
     @git add -A
     @git commit
+
+[windows]
+release-notes FROM TO="HEAD":
+    @go run ./cmd/releasenotes --from {{FROM}} --to {{TO}}; $ec=$LASTEXITCODE; if ($ec -eq 0) { Write-Host "  notes  " -NoNewline -ForegroundColor DarkGray; Write-Host "done" -ForegroundColor Green }; exit $ec
+
+[unix]
+release-notes FROM TO="HEAD":
+    @go run ./cmd/releasenotes --from {{FROM}} --to {{TO}} && printf "  notes  \033[92mdone\033[0m\n"
