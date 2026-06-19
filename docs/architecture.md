@@ -24,7 +24,7 @@ After any commit, delay counter and stored diff both reset.
 
 **Two-speed stabilization.** `interval` controls how often the watcher starts a fresh check when nothing is happening. Once a non-empty diff appears, the watcher switches to `stabilize` re-checks (typically `interval / 2`) until the diff is unchanged — only then does it send to the model. This matters most for the `aggressive` preset: a 30s interval with a 15s stabilize re-check catches the pause-between-bursts faster than waiting another 30s for the next ticker.
 
-**LLM as the only oracle.** No heuristics, no line-count thresholds. The model sees the raw diff and reasons about logical completeness. Invalid JSON from the model → fallback commit (`auto: fallback commit`).
+**LLM as the only oracle.** No heuristics, no line-count thresholds. The model sees the full diff — tracked changes plus untracked files — and reasons about logical completeness. Invalid JSON from the model → fallback commit (`auto: fallback commit`).
 
 **Network errors don't count.** A failed API call is not a delay. The counter only increments on explicit `commit: false`. This prevents network flakiness from burning through `max_delays`.
 
