@@ -204,7 +204,9 @@ func (w *Watcher) doCommit(message string) {
 		return
 	}
 	if err := w.git.Commit(message); err != nil {
-		w.emit(EventError, fmt.Sprintf("git commit: %s", err))
+		w.emit(EventSkip, "pre-commit hooks failed, retrying next tick")
+		w.prevDiff = ""
+		w.delayCounter = 0
 		return
 	}
 	w.emit(EventCommit, message)
