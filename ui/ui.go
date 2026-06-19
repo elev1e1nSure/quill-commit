@@ -33,14 +33,6 @@ const statusBlockHeight = 7
 // boxOverhead is the total horizontal chars added by boxStyle (2 borders + 2 padding each side = 4).
 const boxOverhead = 4
 
-const (
-	statusNone        int = iota
-	statusChecking
-	statusIdle
-	statusStabilizing
-	statusDelaying
-)
-
 type tickMsg time.Time
 type eventMsg watcher.Event
 
@@ -54,17 +46,14 @@ type Model struct {
 	vp           viewport.Model
 	width        int
 	height       int
-	ready        bool
-	statusKind   int
-	statusLine   string
+	ready bool
 }
 
 func New(cfg config.Config, events <-chan watcher.Event) Model {
 	return Model{
-		cfg:        cfg,
-		events:     events,
-		nextCheck:  time.Now().Add(time.Duration(cfg.Interval * float64(time.Minute))),
-		statusKind: statusNone,
+		cfg:       cfg,
+		events:    events,
+		nextCheck: time.Now().Add(time.Duration(cfg.Interval * float64(time.Minute))),
 	}
 }
 
@@ -99,7 +88,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		vpH := m.height - statusBlockHeight - 3 - 1 // log block: top border + title + bottom border + status line = 4 overhead
+		vpH := m.height - statusBlockHeight - 3 // log block: top border + title + bottom border = 3 overhead
 		if vpH < 3 {
 			vpH = 3
 		}
@@ -118,16 +107,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		cmds = append(cmds, secondTick())
-		switch m.statusKind {
-		case statusIdle:
-			remaining := time.Until(m.nextCheck)
-			if remaining <= 0 {
-				m.statusLine = "Idle... Checking diff..."
-			} else {
-				m.statusLine = fmt.Sprintf("Idle... Checking diff in %ds", int(remaining.Seconds()))
-			}
-
-		}
 
 	case eventMsg:
 		m.applyEvent(watcher.Event(msg))
@@ -152,16 +131,16 @@ func (m *Model) applyEvent(e watcher.Event) {
 	switch e.Kind {
 	case watcher.EventCheck:
 		m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
-		m.statusKind = statusChecking
-		m.statusLine = "Checking diff..."
 
 	case watcher.EventDecision:
 		if strings.Contains(e.Message, "commit:") {
 			// EventCommit handles the log entry
 		} else {
 			m.delayCounter++
-			m.statusKind = statusDelaying
-			m.statusLine = e.Message
+			var delayMin int
+			if n, err := fmt.Sscanf(e.Message, "model says wait %dm", &delayMin); n == 1 && err == nil {
+				m.nextCheck = e.Time.Add(time.Duration(delayMin) * time.Minute)
+			}
 		}
 
 	case watcher.EventCommit:
@@ -174,30 +153,16 @@ func (m *Model) applyEvent(e watcher.Event) {
 			m.log = append(m.log, ts+"  "+stText.Render(e.Message))
 		}
 		m.delayCounter = 0
-		m.statusKind = statusNone
-		m.statusLine = ""
 
 	case watcher.EventForced:
 		m.delayCounter = 0
 		m.log = append(m.log, ts+"  "+stWarn.Render(e.Message))
-		m.statusKind = statusNone
-		m.statusLine = ""
 
 	case watcher.EventError:
 		m.log = append(m.log, ts+"  "+stText.Render(e.Message))
-		m.statusKind = statusNone
-		m.statusLine = ""
 
 	case watcher.EventSkip:
-		if strings.Contains(e.Message, "diff empty") {
-			m.statusKind = statusIdle
-			remaining := time.Until(m.nextCheck)
-			if remaining <= 0 {
-				m.statusLine = "Idle... Checking diff..."
-			} else {
-				m.statusLine = fmt.Sprintf("Idle... Checking diff in %ds", int(remaining.Seconds()))
-			}
-		} else if strings.Contains(e.Message, "diff changed") {
+		if strings.Contains(e.Message, "diff changed") {
 			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Stabilize * float64(time.Minute)))
 		} else {
 			m.log = append(m.log, ts+"  "+stText.Render(e.Message))
@@ -270,8 +235,5 @@ func (m Model) renderStatus() string {
 
 func (m Model) renderLogBlock() string {
 	content := stTitle.Render("log") + "\n" + m.vp.View()
-	if m.statusLine != "" {
-		content += "\n" + stDim.Render(m.statusLine)
-	}
 	return boxStyle.Width(m.width - boxOverhead).Render(content)
 }
