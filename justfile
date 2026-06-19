@@ -10,8 +10,6 @@ build:
 build:
     @go build -o {{bin}} . && printf "  built  \033[96m{{bin}}\033[0m\n"
 
-run: build
-    @./{{bin}}
 
 [windows]
 test:

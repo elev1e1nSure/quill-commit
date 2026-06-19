@@ -17,11 +17,11 @@ just build
 ## Commands
 
 ```
-just build    # compile binary to ./quill-commit
-just run      # build and run (needs --api-key in justfile or env)
+just build    # compile binary
 just test     # go test ./...
 just lint     # golangci-lint run ./...
 just tidy     # go mod tidy
+just commit   # git add -A && commit
 ```
 
 ## Commit conventions
