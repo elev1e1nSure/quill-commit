@@ -30,9 +30,15 @@ func printUsage() {
 		"",
 		stTitle.Render("Options"),
 		"  " + stFlag.Render("-api-key") + " string    OpenRouter API key (saved for future runs)",
+		"  " + stFlag.Render("-preset") + " string    active (default), deep, aggressive",
 		"  " + stFlag.Render("-model") + " string    model override (overrides quill.toml)",
 		"  " + stFlag.Render("-interval") + " float    check interval in minutes (overrides quill.toml)",
 		"  " + stFlag.Render("-max-delays") + " int     max delays before forced commit (overrides quill.toml)",
+		"",
+		stTitle.Render("Presets"),
+		"  " + stFlag.Render("active") + "      " + stMeta.Render("interval=2m  max_delays=3  — active coding sessions (default)"),
+		"  " + stFlag.Render("deep") + "        " + stMeta.Render("interval=5m  max_delays=2  — long focused work"),
+		"  " + stFlag.Render("aggressive") + "  " + stMeta.Render("interval=30s max_delays=4  — frequent commits"),
 		"",
 		stMeta.Render("alternatively set QUILL_API_KEY env var"),
 	}
@@ -47,6 +53,7 @@ func main() {
 	modelFlag := flag.String("model", "", "model override (overrides quill.toml)")
 	intervalFlag := flag.Float64("interval", 0, "check interval in minutes (overrides quill.toml)")
 	maxDelaysFlag := flag.Int("max-delays", 0, "max consecutive delays before forced commit (overrides quill.toml)")
+	presetFlag := flag.String("preset", "", "config preset: active (default), deep, aggressive")
 
 	if len(os.Args) == 1 {
 		printUsage()
@@ -90,6 +97,13 @@ func main() {
 	}
 
 	dirty := false
+	if *presetFlag != "" {
+		if !config.ApplyPreset(&cfg, *presetFlag) {
+			fmt.Fprintf(os.Stderr, "error: unknown preset %q — valid presets: active, deep, aggressive\n", *presetFlag)
+			os.Exit(1)
+		}
+		dirty = true
+	}
 	if *modelFlag != "" {
 		cfg.Model = *modelFlag
 		dirty = true

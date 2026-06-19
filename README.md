@@ -30,9 +30,24 @@ Reads `quill.toml` from the current directory. Creates it with defaults on first
 | Flag | Description |
 |------|-------------|
 | `--api-key` | OpenRouter API key. Saved to credentials file on use. |
-| `--model` | Model override. Takes precedence over `quill.toml`. |
-| `--interval` | Check interval in minutes. Supports decimals (`0.5` = 30s). Overrides `quill.toml`. |
-| `--max-delays` | Max consecutive delays before forced commit. Overrides `quill.toml`. |
+| `--preset` | Apply a named config preset (saved to `quill.toml`). |
+| `--model` | Model override. Saved to `quill.toml`. |
+| `--interval` | Check interval in minutes. Supports decimals (`0.5` = 30s). Saved to `quill.toml`. |
+| `--max-delays` | Max consecutive delays before forced commit. Saved to `quill.toml`. |
+
+## Presets
+
+| Preset | interval | max_delays | When to use |
+|--------|----------|------------|-------------|
+| `active` | 2m | 3 | Active coding sessions — default |
+| `deep` | 5m | 2 | Long focused work, big refactors |
+| `aggressive` | 30s | 4 | Fast feedback, frequent commits |
+
+```
+quill-commit --preset deep
+```
+
+Preset values are saved to `quill.toml` and persist across restarts.
 
 **Quit:** `q` or `Ctrl+C` in the TUI.
 

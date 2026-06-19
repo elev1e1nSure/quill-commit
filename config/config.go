@@ -8,11 +8,33 @@ import (
 )
 
 const (
-	DefaultInterval  = 10.0
+	DefaultInterval  = 2.0
 	DefaultMaxDelays = 3
 	DefaultModel     = "deepseek/deepseek-v4-flash"
 	FileName         = "quill.toml"
 )
+
+type Preset struct {
+	Interval  float64
+	MaxDelays int
+	Desc      string
+}
+
+var Presets = map[string]Preset{
+	"active":     {Interval: 2, MaxDelays: 3, Desc: "check every 2m, stabilizes in 4m — good for active coding sessions"},
+	"deep":       {Interval: 5, MaxDelays: 2, Desc: "check every 5m, stabilizes in 10m — for long focused work"},
+	"aggressive": {Interval: 0.5, MaxDelays: 4, Desc: "check every 30s, stabilizes in 1m — frequent commits"},
+}
+
+func ApplyPreset(cfg *Config, name string) bool {
+	p, ok := Presets[name]
+	if !ok {
+		return false
+	}
+	cfg.Interval = p.Interval
+	cfg.MaxDelays = p.MaxDelays
+	return true
+}
 
 type Config struct {
 	Interval  float64 `toml:"interval"`
