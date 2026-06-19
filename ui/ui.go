@@ -136,10 +136,16 @@ func (m *Model) applyEvent(e watcher.Event) {
 		if strings.Contains(e.Message, "commit:") {
 			// EventCommit handles the log entry
 		} else {
-			m.delayCounter++
-			var delayMin int
-			if n, err := fmt.Sscanf(e.Message, "model says wait %dm", &delayMin); n == 1 && err == nil {
+			var delayMin, delayCount, maxDelays int
+			n, err := fmt.Sscanf(e.Message, "model says wait %dm (delay %d/%d)", &delayMin, &delayCount, &maxDelays)
+			if n >= 2 && err == nil {
+				m.delayCounter = delayCount
 				m.nextCheck = e.Time.Add(time.Duration(delayMin) * time.Minute)
+			} else {
+				m.delayCounter++
+				if n, err := fmt.Sscanf(e.Message, "model says wait %dm", &delayMin); n == 1 && err == nil {
+					m.nextCheck = e.Time.Add(time.Duration(delayMin) * time.Minute)
+				}
 			}
 		}
 
@@ -161,9 +167,11 @@ func (m *Model) applyEvent(e watcher.Event) {
 		m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
 
 	case watcher.EventError:
+		m.delayCounter = 0
 		m.log = append(m.log, ts+"  "+stText.Render(e.Message))
 
 	case watcher.EventSkip:
+		m.delayCounter = 0
 		if strings.Contains(e.Message, "diff changed") {
 			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Stabilize * float64(time.Minute)))
 		} else if strings.Contains(e.Message, "diff empty") {

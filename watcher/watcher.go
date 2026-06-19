@@ -150,6 +150,7 @@ func (w *Watcher) tick() {
 	diff, err := w.git.Diff()
 	if err != nil {
 		w.emit(EventError, fmt.Sprintf("git diff: %s", err))
+		w.delayCounter = 0
 		return
 	}
 
@@ -158,6 +159,7 @@ func (w *Watcher) tick() {
 	if diff == "" {
 		w.emit(EventSkip, "diff empty, waiting")
 		w.prevDiff = ""
+		w.delayCounter = 0
 		time.Sleep(2 * time.Second)
 		return
 	}
@@ -272,6 +274,7 @@ func (w *Watcher) delayLoop(stableDiff string) {
 		currentDiff, err := w.git.Diff()
 		if err != nil {
 			w.emit(EventError, fmt.Sprintf("git diff after delay: %s", err))
+			w.delayCounter = 0
 			return
 		}
 		if currentDiff != stableDiff {
