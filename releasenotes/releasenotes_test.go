@@ -69,8 +69,15 @@ func TestGetCommits_emptyRange(t *testing.T) {
 }
 
 func TestGenerate_noRefs(t *testing.T) {
-	_, err := Generate(context.Background(), "nonexistent-tag-that-wont-exist", "HEAD", "key", "model")
+	_, err := Generate(context.Background(), "nonexistent-tag-that-wont-exist", "HEAD", "key", "model", false)
 	if err == nil {
 		t.Fatal("expected error for nonexistent ref")
+	}
+}
+
+func TestBuildInitialPrompt(t *testing.T) {
+	p := buildInitialPrompt()
+	if !strings.Contains(p, "initial release") {
+		t.Fatal("initial prompt should mention initial release")
 	}
 }

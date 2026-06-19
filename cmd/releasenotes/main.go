@@ -14,6 +14,7 @@ func main() {
 	to := flag.String("to", "HEAD", "to ref (tag or commit hash)")
 	apiKey := flag.String("api-key", os.Getenv("OPENROUTER_API_KEY"), "OpenRouter API key")
 	model := flag.String("model", "deepseek/deepseek-v4-flash", "AI model name")
+	initial := flag.Bool("initial", false, "initial release — describe the software itself")
 	flag.Parse()
 
 	if *apiKey == "" {
@@ -25,7 +26,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	notes, err := releasenotes.Generate(context.Background(), *from, *to, *apiKey, *model)
+	notes, err := releasenotes.Generate(context.Background(), *from, *to, *apiKey, *model, *initial)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

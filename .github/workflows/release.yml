@@ -19,8 +19,14 @@ jobs:
           go-version: '1.24'
       - name: Generate AI release notes
         run: |
-          FROM=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)
-          go run ./cmd/releasenotes --from "$FROM" --to HEAD > release-notes.md
+          FROM=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$FROM" ]; then
+            FLAG="--initial"
+            FROM=$(git rev-list --max-parents=0 HEAD)
+          else
+            FLAG=""
+          fi
+          go run ./cmd/releasenotes $FLAG --from "$FROM" --to HEAD > release-notes.md
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       - name: Create Release

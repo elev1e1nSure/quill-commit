@@ -18,7 +18,7 @@ const (
 	readTimeout = 30 * time.Second
 )
 
-func Generate(ctx context.Context, fromRef, toRef, apiKey, model string) (string, error) {
+func Generate(ctx context.Context, fromRef, toRef, apiKey, model string, initial bool) (string, error) {
 	commits, err := getCommits(fromRef, toRef)
 	if err != nil {
 		return "", fmt.Errorf("get commits: %w", err)
@@ -27,7 +27,11 @@ func Generate(ctx context.Context, fromRef, toRef, apiKey, model string) (string
 		return "", fmt.Errorf("no commits between %s and %s", fromRef, toRef)
 	}
 
-	return chat(ctx, model, apiKey, buildPrompt(), strings.Join(commits, "\n"))
+	prompt := buildPrompt()
+	if initial {
+		prompt = buildInitialPrompt()
+	}
+	return chat(ctx, model, apiKey, prompt, strings.Join(commits, "\n"))
 }
 
 func getCommits(fromRef, toRef string) ([]string, error) {
@@ -65,6 +69,27 @@ FORMAT:
 
 ## 🐛 Fixes
 - User-facing fix description
+
+COMMITS:`
+}
+
+func buildInitialPrompt() string {
+	return `You are writing the initial release notes for a brand new software project. These are its very first release notes ever.
+
+Given the list of commits that made up this project, describe what the software DOES from a user perspective.
+
+CRITICAL:
+- Describe the product, not the build process. Do NOT say "Added X feature" — instead say what the tool can do
+- 3-6 bullet points in total under "## ✨ Features"
+- No "Fixes" category for an initial release — it's all new
+- Drop all implementation details (race conditions, refactors, CI, tests, error handling — that's table stakes)
+- Write for a user who wants to know if they should try this tool
+- Return ONLY the markdown, no preamble
+
+FORMAT:
+## ✨ Features
+- What the tool can do from a user's perspective
+- Each bullet is a capability, not a commit
 
 COMMITS:`
 }
