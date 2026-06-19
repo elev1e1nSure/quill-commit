@@ -4,10 +4,10 @@ tidy:
     go mod tidy
 
 build:
-    go build -o quill-commit .
+    go build -o quill-commit.exe .
 
 run: build
-    ./quill-commit
+    ./quill-commit.exe
 
 lint:
     golangci-lint run ./...
