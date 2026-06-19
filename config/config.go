@@ -67,15 +67,14 @@ func Save(path string, cfg Config) error {
 }
 
 func EnsureDefault(path string) (Config, bool, error) {
-	info, statErr := os.Stat(path)
-	if statErr == nil && info != nil {
-		cfg, err := Load(path)
-		return cfg, false, err
+	cfg, err := Load(path)
+	if err == nil {
+		return cfg, false, nil
 	}
-	if statErr != nil && !os.IsNotExist(statErr) {
-		return Config{}, false, fmt.Errorf("stat config: %w", statErr)
+	if !os.IsNotExist(err) {
+		return Config{}, false, fmt.Errorf("load config: %w", err)
 	}
-	cfg := Default()
+	cfg = Default()
 	if err := Save(path, cfg); err != nil {
 		return Config{}, false, err
 	}

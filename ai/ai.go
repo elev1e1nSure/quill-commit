@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -28,9 +29,18 @@ func Ask(diff, model, apiKey string) (Decision, error) {
 	prompt := `You are an automatic git committer.
 You receive a git diff. Decide if a logical unit of work is complete.
 Return ONLY json without markdown:
-{"commit": bool, "delay": int (minutes if commit false), "message": string (if commit true)}`
+{"commit": bool, "delay": int (minutes if commit false), "message": string (if commit true)}
 
-	body := map[string]interface{}{
+If commit is true, the message MUST follow Conventional Commits format:
+  type(scope): short description
+Rules:
+- type is one of: feat, fix, refactor, perf, test, docs, chore, style, ci, build
+- scope is a short lowercase word (package or area changed), optional but preferred
+- description is imperative, lowercase, no period, max 72 characters total for the whole message
+- entire message must be under 100 characters
+Example: fix(ai): trim whitespace from model response`
+
+	body := map[string]any{
 		"model": model,
 		"messages": []map[string]string{
 			{"role": "system", "content": prompt},
@@ -77,7 +87,11 @@ Return ONLY json without markdown:
 		return fallback(), fmt.Errorf("empty response")
 	}
 
-	content := result.Choices[0].Message.Content
+	content := strings.Trim(result.Choices[0].Message.Content, " \n")
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimPrefix(content, "```")
+	content = strings.TrimSuffix(content, "```")
+	content = strings.TrimSpace(content)
 	var decision Decision
 	if err := json.Unmarshal([]byte(content), &decision); err != nil {
 		return fallback(), fmt.Errorf("parse decision: %w", err)
