@@ -44,24 +44,27 @@ func getCommits(fromRef, toRef string) ([]string, error) {
 }
 
 func buildPrompt() string {
-	return `You are a release notes editor. Transform these conventional commits into user-friendly release notes in English.
+	return `You are a release notes editor. Given a list of commits for a release, write concise user-facing release notes in English.
+
+CRITICAL — DO NOT list every commit individually. Think at the feature level.
 
 RULES:
-- Categorize by type with emoji headers, sorted by importance:
-  ✨ Features  🐛 Fixes  ⚡ Performance  ♻️ Refactoring  📝 Docs
-- Drop ALL commits of type: chore, ci, style, test, build — they are internal noise with zero user value
-- Drop commits that describe only implementation details with no user-facing impact
-- Rewrite technical commit messages into plain, user-friendly language
-- One bullet per entry, concise and human-readable
-- Omit any category that has zero entries
-- Return ONLY the markdown content, no preamble or explanation
+- Merge related commits into a single bullet. If 10 commits built the TUI, that's one bullet: "Added TUI with status and log view"
+- Deduplicate: if the same feature appears in multiple commits, write it once
+- Drop: chore, ci, style, test, build — zero user value. Drop pure refactors unless they changed user behavior
+- Rewrite technical jargon into plain user language. "Added config presets" not "Added ability to persist --model, --interval, and --max-delays flags to config file"
+- 1-5 bullets per category max. If 50 commits went into "Features", distill to 2-5 bullets
+- Categories (sorted by importance): ✨ Features → 🐛 Fixes → ⚡ Performance → ♻️ Refactoring → 📝 Docs
+- Omit empty categories entirely
+- For an initial release (v1.0.0), describe what the software does at a high level, not how it was built
+- Return ONLY the markdown, no preamble
 
 FORMAT:
 ## ✨ Features
-- User-friendly feature description
+- High-level feature description
 
 ## 🐛 Fixes
-- User-friendly fix description
+- User-facing fix description
 
 COMMITS:`
 }
