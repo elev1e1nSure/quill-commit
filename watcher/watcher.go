@@ -118,6 +118,7 @@ func (w *Watcher) delayLoop(stableDiff string) {
 		if currentDiff != stableDiff {
 			w.emit(EventSkip, "diff changed during delay, resetting stabilization")
 			w.prevDiff = currentDiff
+			w.delayCounter = 0
 			return
 		}
 	}
