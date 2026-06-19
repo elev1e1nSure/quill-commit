@@ -17,6 +17,8 @@ import (
 	"quill-commit/watcher"
 )
 
+var version = "dev"
+
 var (
 	stTitle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#6C9BD2")).Bold(true)
 	stFlag    = lipgloss.NewStyle().Foreground(lipgloss.Color("#D4D4D4"))
@@ -57,6 +59,7 @@ func main() {
 	stabilizeFlag := flag.Float64("stabilize", 0, "stabilization re-check interval in minutes (overrides quill.toml)")
 	maxDelaysFlag := flag.Int("max-delays", 0, "max consecutive delays before forced commit (overrides quill.toml)")
 	presetFlag := flag.String("preset", "", "config preset: active (default), deep, aggressive")
+	versionFlag := flag.Bool("version", false, "print version and exit")
 
 	if len(os.Args) == 1 {
 		printUsage()
@@ -72,6 +75,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s %s\n\n", stErr.Render("error:"), err.Error())
 		printUsage()
 		os.Exit(1)
+	}
+
+	if *versionFlag {
+		fmt.Println("quill-commit", version)
+		os.Exit(0)
 	}
 
 	apiKey := resolveAPIKey(*apiKeyFlag)

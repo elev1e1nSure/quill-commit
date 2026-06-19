@@ -30,7 +30,7 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       - name: Build Windows binary
-        run: GOOS=windows GOARCH=amd64 go build -o quill-commit-windows-amd64.exe .
+        run: GOOS=windows GOARCH=amd64 go build -ldflags="-X main.version=${GITHUB_REF_NAME}" -o quill-commit-windows-amd64.exe .
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
