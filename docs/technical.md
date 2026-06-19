@@ -28,13 +28,13 @@
 
 ## watcher/
 
-- [ ] `Watcher` struct: holds config, prev diff, delay counter, ticker
-- [ ] Ticker loop every `interval` minutes
-- [ ] Stabilization: skip if diff empty; skip if diff changed; proceed if diff same as prev tick
-- [ ] On model `commit: false`: wait `delay` minutes, retry model (not next tick)
-- [ ] Delay counter: increment on `commit: false`; reset on commit; skip on network error
-- [ ] `max_delays` hit → force commit `"auto: forced commit"`, reset counter
-- [ ] Emit events to TUI via channel
+- [x] `Watcher` struct: holds config, prev diff, delay counter, ticker
+- [x] Ticker loop every `interval` minutes
+- [x] Stabilization: skip if diff empty; skip if diff changed; proceed if diff same as prev tick
+- [x] On model `commit: false`: wait `delay` minutes, retry model (not next tick)
+- [x] Delay counter: increment on `commit: false`; reset on commit; skip on network error
+- [x] `max_delays` hit → force commit `"auto: forced commit"`, reset counter
+- [x] Emit events to TUI via channel
 
 ## ui/
 
