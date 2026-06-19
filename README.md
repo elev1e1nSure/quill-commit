@@ -17,15 +17,22 @@ just build
 ## Usage
 
 ```
-quill-commit --api-key <openrouter-key> [--model <model-id>]
+quill-commit [--api-key <key>] [--model <id>] [--interval <minutes>] [--max-delays <n>]
 ```
 
 Reads `quill.toml` from the current directory. Creates it with defaults on first run.
 
+**API key resolution** (first match wins):
+1. `--api-key` flag — also saves the key to the credentials file for future runs
+2. `QUILL_API_KEY` environment variable
+3. Credentials file (`~/.config/quill-commit/credentials` on Linux/macOS, `%APPDATA%\quill-commit\credentials` on Windows)
+
 | Flag | Description |
 |------|-------------|
-| `--api-key` | OpenRouter API key. Required. |
+| `--api-key` | OpenRouter API key. Saved to credentials file on use. |
 | `--model` | Model override. Takes precedence over `quill.toml`. |
+| `--interval` | Check interval in minutes. Supports decimals (`0.5` = 30s). Overrides `quill.toml`. |
+| `--max-delays` | Max consecutive delays before forced commit. Overrides `quill.toml`. |
 
 **Quit:** `q` or `Ctrl+C` in the TUI.
 
