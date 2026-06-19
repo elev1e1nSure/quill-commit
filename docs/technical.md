@@ -61,3 +61,16 @@
 - [x] `commitlint` + `husky` pre-commit and commit-msg hooks
 - [x] `.golangci.yml` config (enable `errcheck`, `govet`, `staticcheck`)
 - [x] `just build` produces working binary
+
+---
+
+## Done
+
+- [x] ~~`go mod init quill-commit`~~
+- [x] ~~Add dependencies: bubbletea, lipgloss, bubbles, go-toml/v2~~
+- [x] ~~Scaffold package dirs: `config/`, `git/`, `ai/`, `watcher/`, `ui/`~~
+- [x] ~~Create `main.go` entry point~~
+- [x] ~~Define `Config` struct (`interval`, `max_delays`, `model`)~~
+- [x] ~~Read `quill.toml` from cwd; create with defaults if missing~~
+- [x] ~~`.golangci.yml` config~~
+- [x] ~~`just build` produces working binary~~
