@@ -8,18 +8,34 @@ import (
 	"strings"
 )
 
-func Diff() (string, error) {
-	out, err := exec.Command("git", "diff", "HEAD").CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("git diff: %w", err)
-	}
-	s := strings.TrimSpace(string(out))
+func runGit(args ...string) (string, error) {
+	return runGitWithStdin("", args...)
+}
 
-	untracked, err := exec.Command("git", "ls-files", "--others", "--exclude-standard").Output()
+func runGitWithStdin(stdin string, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
+	out, err := cmd.CombinedOutput()
+	s := strings.TrimSpace(string(out))
+	if err != nil {
+		return s, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+	}
+	return s, nil
+}
+
+func Diff() (string, error) {
+	s, err := runGit("diff", "HEAD")
+	if err != nil {
+		return "", err
+	}
+
+	untracked, err := runGit("ls-files", "--others", "--exclude-standard")
 	if err != nil {
 		return s, nil
 	}
-	files := strings.Fields(string(untracked))
+	files := strings.Fields(untracked)
 	for _, f := range files {
 		content, err := os.ReadFile(f)
 		if err != nil {
@@ -50,37 +66,36 @@ func RecentCommits(n int) (string, error) {
 		return "", nil
 	}
 	args := fmt.Sprintf("-%d", n)
-	out, err := exec.Command("git", "log", "--oneline", args).CombinedOutput()
+	out, err := runGit("log", "--oneline", args)
 	if err != nil {
-		if strings.Contains(string(out), "does not have any commits") {
+		if strings.Contains(out, "does not have any commits") {
 			return "", nil
 		}
-		return "", fmt.Errorf("git log: %w", err)
+		return "", err
 	}
-	return strings.TrimSpace(string(out)), nil
+	return out, nil
 }
 
 func StatusShort() (string, error) {
-	out, err := exec.Command("git", "status", "--short").CombinedOutput()
+	out, err := runGit("status", "--short")
 	if err != nil {
-		return "", fmt.Errorf("git status: %w", err)
+		return "", err
 	}
-	s := strings.TrimSpace(string(out))
-	if s == "" {
+	if out == "" {
 		return "", nil
 	}
-	return s, nil
+	return out, nil
 }
 
 func LsFiles() (string, error) {
-	out, err := exec.Command("git", "ls-files").CombinedOutput()
+	out, err := runGit("ls-files")
 	if err != nil {
-		return "", fmt.Errorf("git ls-files: %w", err)
+		return "", err
 	}
-	files := strings.Split(strings.TrimSuffix(string(out), "\n"), "\n")
-	if len(files) == 1 && files[0] == "" {
+	if out == "" {
 		return "", nil
 	}
+	files := strings.Split(out, "\n")
 	sort.Strings(files)
 	return strings.Join(files, "\n"), nil
 }
@@ -100,39 +115,28 @@ func isBinary(data []byte) bool {
 }
 
 func Add() error {
-	out, err := exec.Command("git", "add", "-A").CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
-	}
-	return nil
+	_, err := runGit("add", "-A")
+	return err
 }
 
 func Commit(message string) error {
-	cmd := exec.Command("git", "commit", "-F", "-")
-	cmd.Stdin = strings.NewReader(message)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
-	}
-	return nil
+	_, err := runGitWithStdin(message, "commit", "-F", "-")
+	return err
 }
 
 func IsRepo() bool {
-	return exec.Command("git", "rev-parse", "--git-dir").Run() == nil
+	_, err := runGit("rev-parse", "--git-dir")
+	return err == nil
 }
 
 func HeadHash() string {
-	out, err := exec.Command("git", "rev-parse", "--short", "HEAD").CombinedOutput()
+	out, err := runGit("rev-parse", "--short", "HEAD")
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	return out
 }
 
 func RepoRoot() (string, error) {
-	out, err := exec.Command("git", "rev-parse", "--show-toplevel").CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("git repo-root: %w", err)
-	}
-	return strings.TrimSpace(string(out)), nil
+	return runGit("rev-parse", "--show-toplevel")
 }
