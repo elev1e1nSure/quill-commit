@@ -8,11 +8,14 @@ import (
 )
 
 const (
-	DefaultInterval  = 2.0
-	DefaultStabilize = DefaultInterval / 2
-	DefaultMaxDelays = 3
-	DefaultModel     = "deepseek/deepseek-v4-flash"
-	FileName         = "quill.toml"
+	DefaultInterval           = 2.0
+	DefaultStabilize          = DefaultInterval / 2
+	DefaultMaxDelays          = 3
+	DefaultModel              = "deepseek/deepseek-v4-flash"
+	DefaultIncludeContext     = true
+	DefaultContextBudget      = 8000
+	DefaultRecentCommitsCount = 10
+	FileName                  = "quill.toml"
 )
 
 type Preset struct {
@@ -40,18 +43,26 @@ func ApplyPreset(cfg *Config, name string) bool {
 }
 
 type Config struct {
-	Interval  float64 `toml:"interval"`
-	Stabilize float64 `toml:"stabilize"`
-	MaxDelays int     `toml:"max_delays"`
-	Model     string  `toml:"model"`
+	Interval           float64 `toml:"interval"`
+	Stabilize          float64 `toml:"stabilize"`
+	MaxDelays          int     `toml:"max_delays"`
+	Model              string  `toml:"model"`
+	IncludeContext     bool    `toml:"include_context"`
+	ContextBudget      int     `toml:"context_budget"`
+	RecentCommitsCount int     `toml:"recent_commits"`
+	SessionID          string  `toml:"session_id"`
 }
 
 func Default() Config {
 	return Config{
-		Interval:  DefaultInterval,
-		Stabilize: DefaultStabilize,
-		MaxDelays: DefaultMaxDelays,
-		Model:     DefaultModel,
+		Interval:           DefaultInterval,
+		Stabilize:          DefaultStabilize,
+		MaxDelays:          DefaultMaxDelays,
+		Model:              DefaultModel,
+		IncludeContext:     DefaultIncludeContext,
+		ContextBudget:      DefaultContextBudget,
+		RecentCommitsCount: DefaultRecentCommitsCount,
+		SessionID:          "",
 	}
 }
 
@@ -64,7 +75,7 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("read config: %w", err)
 	}
 
-	var cfg Config
+	cfg := Default()
 	if err := toml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
@@ -80,6 +91,12 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Model == "" {
 		cfg.Model = DefaultModel
+	}
+	if cfg.ContextBudget <= 0 {
+		cfg.ContextBudget = DefaultContextBudget
+	}
+	if cfg.RecentCommitsCount <= 0 {
+		cfg.RecentCommitsCount = DefaultRecentCommitsCount
 	}
 
 	return cfg, nil
