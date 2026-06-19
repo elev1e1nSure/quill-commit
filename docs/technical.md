@@ -11,7 +11,6 @@
 
 - [x] Define `Config` struct (`interval`, `max_delays`, `model`)
 - [x] Read `quill.toml` from cwd; create with defaults if missing
-- [ ] Validate: missing `--api-key` → exit with error
 
 ## git/
 
@@ -49,8 +48,9 @@
 ## main.go
 
 - [ ] Parse `--api-key` and `--model` flags
+- [ ] Validate: missing `--api-key` → exit with error
 - [ ] Load/create config
-- [ ] Run startup checks (git repo, api key present)
+- [ ] Run startup checks (git repo)
 - [ ] Start watcher in goroutine
 - [ ] Start bubbletea program, block until quit
 
