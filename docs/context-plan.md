@@ -29,21 +29,21 @@ Request: system = `BasePrompt + "\n\n---\n\n" + RenderSystem(static)`, user = `R
 
 Stages 4+5 land together (Ask signature change breaks watcher mid-way).
 
-## Stage 1 — git/
+~~## Stage 1 — git/~~
 
-Add to `git/git.go` next to existing helpers, same pattern (`exec.Command` + `CombinedOutput` + `fmt.Errorf("git <sub>: %w", err)` + `TrimSpace`):
+~~Add to `git/git.go` next to existing helpers, same pattern (`exec.Command` + `CombinedOutput` + `fmt.Errorf("git <sub>: %w", err)` + `TrimSpace`):~~
 
-```go
+~~```go
 func RecentCommits(n int) (string, error)  // git log --oneline -n N; n<=0 -> ("", nil); unborn branch (stderr "does not have any commits") -> ("", nil)
 func StatusShort() (string, error)         // git status --short; clean -> ("", nil)
 func LsFiles() (string, error)             // git ls-files; split, SORT lexically, rejoin
-```
+```~~
 
-Tests: `n<=0`, unborn branch, 3 commits asking 3/10, clean/dirty tree, ls-files with subdirs. Reuse temp-repo fixture from `git_test.go`.
+~~Tests: `n<=0`, unborn branch, 3 commits asking 3/10, clean/dirty tree, ls-files with subdirs. Reuse temp-repo fixture from `git_test.go`.~~
 
-Verify: `just lint && just test`. Commit: `feat(git): add RecentCommits, StatusShort, LsFiles`.
+~~Verify: `just lint && just test`. Commit: `feat(git): add RecentCommits, StatusShort, LsFiles`.~~
 
-Sonnet: `Open git/git.go and git_test.go. Add RecentCommits(n int) (git log --oneline -n N; n<=0 returns ("",nil); unborn branch detected by stderr "does not have any commits" returns ("",nil) not error), StatusShort (git status --short, clean -> ("",nil)), LsFiles (git ls-files, split on \n, sort slice, rejoin). Follow Diff() pattern exactly. Tests: n<=0, unborn, 3 commits asking 3 and 10, clean/dirty tree, ls-files subdirs. Reuse existing temp-repo fixture. just lint && just test. Do not commit.`
+~~Sonnet: `Open git/git.go and git_test.go. Add RecentCommits(n int) (git log --oneline -n N; n<=0 returns ("",nil); unborn branch detected by stderr "does not have any commits" returns ("",nil) not error), StatusShort (git status --short, clean -> ("",nil)), LsFiles (git ls-files, split on \n, sort slice, rejoin). Follow Diff() pattern exactly. Tests: n<=0, unborn, 3 commits asking 3 and 10, clean/dirty tree, ls-files subdirs. Reuse existing temp-repo fixture. just lint && just test. Do not commit.`~~
 
 ## Stage 1.5 — ai/ cache capability
 
