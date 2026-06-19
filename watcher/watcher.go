@@ -17,6 +17,7 @@ type EventKind int
 
 const (
 	EventCheck EventKind = iota
+	EventSending
 	EventDecision
 	EventCommit
 	EventForced
@@ -28,6 +29,7 @@ const (
 
 var EventKindNames = map[EventKind]string{
 	EventCheck:    "EventCheck",
+	EventSending:  "EventSending",
 	EventDecision: "EventDecision",
 	EventCommit:   "EventCommit",
 	EventForced:   "EventForced",
@@ -225,6 +227,7 @@ func (w *Watcher) delayLoop(stableDiff string) {
 			ExplicitCache: w.explicitCache,
 		}
 
+		w.emit(EventSending, "asking model")
 		decision, usage, err := w.ai.Ask(req)
 		if err != nil {
 			// network error: do not count toward delay counter; reset so next

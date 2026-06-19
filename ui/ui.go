@@ -36,6 +36,8 @@ const boxOverhead = 4
 type tickMsg time.Time
 type eventMsg watcher.Event
 
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 type Model struct {
 	cfg          config.Config
 	events       <-chan watcher.Event
@@ -46,7 +48,11 @@ type Model struct {
 	vp           viewport.Model
 	width        int
 	height       int
-	ready bool
+	ready        bool
+	spinnerFrame int
+	sending      bool
+	stabilizing  bool
+	pulseTick    bool
 }
 
 func New(cfg config.Config, events <-chan watcher.Event) Model {
@@ -106,6 +112,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.syncViewport()
 
 	case tickMsg:
+		m.spinnerFrame = (m.spinnerFrame + 1) % len(spinnerFrames)
+		m.pulseTick = !m.pulseTick
 		cmds = append(cmds, secondTick())
 
 	case eventMsg:
@@ -131,8 +139,15 @@ func (m *Model) applyEvent(e watcher.Event) {
 	switch e.Kind {
 	case watcher.EventCheck:
 		m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
+		m.sending = false
+		m.stabilizing = false
+
+	case watcher.EventSending:
+		m.sending = true
+		m.stabilizing = false
 
 	case watcher.EventDecision:
+		m.sending = false
 		if strings.Contains(e.Message, "commit:") {
 			// EventCommit handles the log entry
 		} else {
@@ -150,6 +165,8 @@ func (m *Model) applyEvent(e watcher.Event) {
 		}
 
 	case watcher.EventCommit:
+		m.sending = false
+		m.stabilizing = false
 		hash := git.HeadHash()
 		if hash != "" {
 			m.lastCommit = stAccent2.Render(hash) + " " + stText.Render(e.Message)
@@ -167,21 +184,26 @@ func (m *Model) applyEvent(e watcher.Event) {
 		m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
 
 	case watcher.EventError:
+		m.sending = false
+		m.stabilizing = false
 		m.delayCounter = 0
 		m.log = append(m.log, ts+"  "+stText.Render(e.Message))
 
 	case watcher.EventSkip:
 		m.delayCounter = 0
 		if strings.Contains(e.Message, "diff changed") {
+			m.stabilizing = true
 			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Stabilize * float64(time.Minute)))
+			m.log = append(m.log, ts+"  "+stDim.Render("stabilizing..."))
 		} else if strings.Contains(e.Message, "diff empty") {
-			// only status, no log
+			m.stabilizing = false
 		} else {
+			m.stabilizing = false
 			m.log = append(m.log, ts+"  "+stText.Render(e.Message))
 		}
 
 	case watcher.EventDelay:
-		m.log = append(m.log, ts+"  "+stText.Render(e.Message))
+		m.log = append(m.log, ts+"  "+stDim.Render(e.Message))
 
 	case watcher.EventInfo:
 		m.log = append(m.log, ts+"  "+stDim.Render(e.Message))
@@ -209,9 +231,14 @@ func (m Model) View() string {
 func (m Model) renderStatus() string {
 	remaining := time.Until(m.nextCheck)
 	var nextStr string
+	spinner := stAccent2.Render(spinnerFrames[m.spinnerFrame])
 	switch {
+	case m.sending:
+		nextStr = spinner + " " + stAccent2.Render("asking model...")
 	case remaining <= 0:
-		nextStr = stAccent2.Render("checking...")
+		nextStr = spinner + " " + stAccent2.Render("checking...")
+	case m.stabilizing:
+		nextStr = spinner + " " + stAccent2.Render("stabilizing...")
 	case int(remaining.Minutes()) > 0:
 		nextStr = stText.Render(fmt.Sprintf("next check in %dm %ds", int(remaining.Minutes()), int(remaining.Seconds())%60))
 	default:
@@ -221,6 +248,12 @@ func (m Model) renderStatus() string {
 	lastCommit := m.lastCommit
 	if lastCommit == "" {
 		lastCommit = stDim.Render("none")
+	} else if m.stabilizing {
+		dot := "●"
+		if m.pulseTick {
+			dot = "○"
+		}
+		lastCommit = stDim.Render(dot) + " " + lastCommit
 	}
 
 	lbl := func(s string) string { return stDim.Render(fmt.Sprintf("%-12s", s)) }
