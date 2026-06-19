@@ -113,6 +113,7 @@ func (w *Watcher) tick() {
 
 	for diff != w.prevDiff {
 		w.emit(EventSkip, fmt.Sprintf("diff changed, re-checking in %s", formatDuration(w.cfg.Stabilize)))
+		time.Sleep(2 * time.Second)
 		w.prevDiff = diff
 		time.Sleep(time.Duration(w.cfg.Stabilize * float64(time.Minute)))
 		diff, err = w.git.Diff()
