@@ -46,14 +46,23 @@ func main() {
 		fmt.Printf("created %s with defaults\n", config.FileName)
 	}
 
+	dirty := false
 	if *modelFlag != "" {
 		cfg.Model = *modelFlag
+		dirty = true
 	}
 	if *intervalFlag > 0 {
 		cfg.Interval = *intervalFlag
+		dirty = true
 	}
 	if *maxDelaysFlag > 0 {
 		cfg.MaxDelays = *maxDelaysFlag
+		dirty = true
+	}
+	if dirty {
+		if err := config.Save(config.FileName, cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "warn: could not save config: %v\n", err)
+		}
 	}
 
 	w := watcher.New(cfg, apiKey)
