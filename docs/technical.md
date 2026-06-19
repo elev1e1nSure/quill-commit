@@ -9,8 +9,8 @@
 
 ## config/
 
-- [ ] Define `Config` struct (`interval`, `max_delays`, `model`)
-- [ ] Read `quill.toml` from cwd; create with defaults if missing
+- [x] Define `Config` struct (`interval`, `max_delays`, `model`)
+- [x] Read `quill.toml` from cwd; create with defaults if missing
 - [ ] Validate: missing `--api-key` → exit with error
 
 ## git/
