@@ -3,11 +3,13 @@ default: lint
 tidy:
     go mod tidy
 
+bin := "quill-commit" + if os_family() == "windows" { ".exe" } else { "" }
+
 build:
-    go build -o quill-commit.exe .
+    go build -o {{bin}} .
 
 run: build
-    ./quill-commit.exe
+    ./{{bin}}
 
 lint:
     golangci-lint run ./...
