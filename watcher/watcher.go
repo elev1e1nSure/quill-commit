@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"quill-commit/ai"
@@ -20,6 +21,16 @@ const (
 	EventSkip
 	EventDelay
 )
+
+var EventKindNames = map[EventKind]string{
+	EventCheck:    "EventCheck",
+	EventDecision: "EventDecision",
+	EventCommit:   "EventCommit",
+	EventForced:   "EventForced",
+	EventError:    "EventError",
+	EventSkip:     "EventSkip",
+	EventDelay:    "EventDelay",
+}
 
 type Event struct {
 	Kind    EventKind
@@ -182,5 +193,6 @@ func (w *Watcher) emit(kind EventKind, msg string) {
 	select {
 	case w.Events <- newEvent(kind, msg):
 	default:
+		fmt.Fprintf(os.Stderr, "warn: event channel full, dropped %s: %s\n", EventKindNames[kind], msg)
 	}
 }
