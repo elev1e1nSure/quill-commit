@@ -6,7 +6,7 @@ quill-commit — a Go TUI tool that watches a git repo and auto-commits changes 
 
 ## Stack
 
-- **Language:** Go 1.22
+- **Language:** Go 1.24.2
 - **TUI:** `github.com/charmbracelet/bubbletea` + `github.com/charmbracelet/lipgloss` + `github.com/charmbracelet/bubbles`
 - **Config:** `github.com/pelletier/go-toml/v2`
 - **Lint:** `golangci-lint`
@@ -22,13 +22,12 @@ quill-commit — a Go TUI tool that watches a git repo and auto-commits changes 
 
 ## Docs
 
-- `docs/idea.md` — what this tool is and why it exists
-- `docs/technical.md` — implementation checklist (tasks with `[ ]` / `[x]`)
-- `docs/plan.md` — original full spec (authoritative reference for watcher logic, TUI colors, error handling)
+- `docs/architecture.md` — design decisions, watcher logic, event types, package layout
+- `docs/development.md` — build/test/lint commands, tooling setup, commit conventions
 
 ## Rules
 
-- Read `docs/technical.md` and `docs/plan.md` before starting any feature work.
+- Read `docs/architecture.md` before starting any feature work.
 - Only conventional commits: `type(scope): description` (types: feat, fix, chore, docs, style, refactor, perf, test, ci, build).
 - No emoji in code or commits.
 - Do not commit secrets, `.env` files, or `quill.toml` with real keys.
