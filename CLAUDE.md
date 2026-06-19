@@ -31,4 +31,5 @@ quill-commit — a Go TUI tool that watches a git repo and auto-commits changes 
 - Only conventional commits: `type(scope): description` (types: feat, fix, chore, docs, style, refactor, perf, test, ci, build).
 - No emoji in code or commits.
 - Do not commit secrets, `.env` files, or `quill.toml` with real keys.
-- TUI minimal — two blocks (Status + Log), verbose block reserved but hidden in MVP.
+- TUI minimal — two blocks (Status + Log), verbose block reserved but hidden in MVP.  
+

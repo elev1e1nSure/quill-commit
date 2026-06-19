@@ -28,7 +28,7 @@ var (
 
 // statusBlockHeight is the fixed line count of the rendered status block
 // (top border + title + 4 rows + bottom border = 7).
-const statusBlockHeight = 7
+const statusBlockHeight = 6
 
 // boxOverhead is the total horizontal chars added by boxStyle (2 borders + 2 padding each side = 4).
 const boxOverhead = 4
@@ -195,19 +195,6 @@ func (m Model) View() string {
 	)
 }
 
-func formatInterval(minutes float64) string {
-	d := time.Duration(minutes * float64(time.Minute))
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	}
-	m := int(d.Minutes())
-	s := int(d.Seconds()) % 60
-	if s == 0 {
-		return fmt.Sprintf("%dm", m)
-	}
-	return fmt.Sprintf("%dm %ds", m, s)
-}
-
 func (m Model) renderStatus() string {
 	remaining := time.Until(m.nextCheck)
 	var nextStr string
@@ -228,7 +215,6 @@ func (m Model) renderStatus() string {
 	lbl := func(s string) string { return stDim.Render(fmt.Sprintf("%-12s", s)) }
 	rows := strings.Join([]string{
 		stTitle.Render("status"),
-		lbl("interval") + "  " + stText.Render(formatInterval(m.cfg.Interval)) + "  " + stDim.Render("stabilize "+formatInterval(m.cfg.Stabilize)),
 		lbl("status") + "  " + nextStr,
 		lbl("delays") + "  " + stText.Render(fmt.Sprintf("%d / %d", m.delayCounter, m.cfg.MaxDelays)),
 		lbl("last commit") + "  " + lastCommit,
