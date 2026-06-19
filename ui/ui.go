@@ -174,6 +174,9 @@ func (m *Model) applyEvent(e watcher.Event) {
 
 	case watcher.EventDelay:
 		m.log = append(m.log, ts+"  "+stText.Render(e.Message))
+
+	case watcher.EventInfo:
+		m.log = append(m.log, ts+"  "+stDim.Render(e.Message))
 	}
 }
 

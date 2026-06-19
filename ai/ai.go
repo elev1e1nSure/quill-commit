@@ -31,11 +31,11 @@ type httpClient interface {
 }
 
 var (
-	httpCli                 httpClient = &http.Client{Timeout: dialTimeout + readTimeout}
-	openRouterURL                      = "https://openrouter.ai/api/v1/chat/completions"
-	openRouterModelsURL                = "https://openrouter.ai/api/v1/models"
+	httpCli                httpClient = &http.Client{Timeout: dialTimeout + readTimeout}
+	openRouterURL                     = "https://openrouter.ai/api/v1/chat/completions"
+	openRouterModelsURL               = "https://openrouter.ai/api/v1/models"
 	cacheCapabilityTimeout            = dialTimeout
-	CacheCapabilityFn                  = CacheCapability
+	CacheCapabilityFn                 = CacheCapability
 )
 
 type Request struct {

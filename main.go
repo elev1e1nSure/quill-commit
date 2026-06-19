@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -84,18 +85,20 @@ func main() {
 		}
 	}
 
-	if !git.IsRepo() {
-		fmt.Fprintln(os.Stderr, "error: not a git repository")
+	repoRoot, err := git.RepoRoot()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error: get git repo root:", err)
 		os.Exit(1)
 	}
 
-	cfg, created, err := config.EnsureDefault(config.FileName)
+	configPath := filepath.Join(repoRoot, config.FileName)
+	cfg, created, err := config.EnsureDefault(configPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 	if created {
-		fmt.Printf("created %s with defaults\n", config.FileName)
+		fmt.Printf("created %s with defaults\n", configPath)
 	}
 
 	dirty := false
@@ -123,15 +126,9 @@ func main() {
 		dirty = true
 	}
 	if dirty {
-		if err := config.Save(config.FileName, cfg); err != nil {
+		if err := config.Save(configPath, cfg); err != nil {
 			fmt.Fprintf(os.Stderr, "warn: could not save config: %v\n", err)
 		}
-	}
-
-	repoRoot, err := git.RepoRoot()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: get git repo root:", err)
-		os.Exit(1)
 	}
 
 	w := watcher.New(cfg, apiKey, repoRoot)

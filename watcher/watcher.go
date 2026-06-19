@@ -23,6 +23,7 @@ const (
 	EventError
 	EventSkip
 	EventDelay
+	EventInfo
 )
 
 var EventKindNames = map[EventKind]string{
@@ -33,6 +34,7 @@ var EventKindNames = map[EventKind]string{
 	EventError:    "EventError",
 	EventSkip:     "EventSkip",
 	EventDelay:    "EventDelay",
+	EventInfo:     "EventInfo",
 }
 
 type Event struct {
@@ -203,7 +205,7 @@ func (w *Watcher) delayLoop(stableDiff string) {
 		if w.cfg.IncludeContext {
 			dyn, dynErr := context.BuildDynamic(w.cfg.RecentCommitsCount)
 			if dynErr != nil {
-				fmt.Fprintln(os.Stderr, "warn: context.BuildDynamic:", dynErr)
+				w.emit(EventInfo, fmt.Sprintf("warn: context.BuildDynamic: %s", dynErr))
 			}
 			sysPrompt = ai.BasePrompt + "\n\n---\n\n" + context.RenderSystem(w.static, w.staticBudget)
 			userPrompt = context.RenderUser(dyn, stableDiff)
@@ -235,16 +237,16 @@ func (w *Watcher) delayLoop(stableDiff string) {
 				if w.cacheMisses > 0 || w.staticBudget < w.fullBudget {
 					w.cacheMisses = 0
 					w.staticBudget = w.fullBudget
-					fmt.Fprintln(os.Stderr, "cache: recovered full budget")
+					w.emit(EventInfo, "cache: recovered full budget")
 				}
-				fmt.Fprintf(os.Stderr, "cache: hit %d tok\n", usage.CachedTokens)
+				w.emit(EventInfo, fmt.Sprintf("cache: hit %d tok", usage.CachedTokens))
 			} else {
 				w.cacheMisses++
-				fmt.Fprintf(os.Stderr, "cache: miss (%d)\n", w.cacheMisses)
+				w.emit(EventInfo, fmt.Sprintf("cache: miss (%d)", w.cacheMisses))
 				if w.cacheMisses >= 3 && w.staticBudget > 800 {
 					w.staticBudget = 800
 					w.cacheMisses = 0
-					fmt.Fprintln(os.Stderr, "cache: budget shrunk to 800 chars")
+					w.emit(EventInfo, "cache: budget shrunk to 800 chars")
 				}
 			}
 		}
