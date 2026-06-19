@@ -35,7 +35,7 @@ func IsRepo() bool {
 }
 
 func HeadHash() string {
-	out, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output()
+	out, err := exec.Command("git", "rev-parse", "--short", "HEAD").CombinedOutput()
 	if err != nil {
 		return ""
 	}
