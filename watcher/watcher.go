@@ -239,16 +239,12 @@ func (w *Watcher) delayLoop(stableDiff string) {
 				if w.cacheMisses > 0 || w.staticBudget < w.fullBudget {
 					w.cacheMisses = 0
 					w.staticBudget = w.fullBudget
-					w.emit(EventInfo, "cache: recovered full budget")
 				}
-				w.emit(EventInfo, fmt.Sprintf("cache: hit %d tok", usage.CachedTokens))
 			} else {
 				w.cacheMisses++
-				w.emit(EventInfo, fmt.Sprintf("cache: miss (%d)", w.cacheMisses))
 				if w.cacheMisses >= 3 && w.staticBudget > 800 {
 					w.staticBudget = 800
 					w.cacheMisses = 0
-					w.emit(EventInfo, "cache: budget shrunk to 800 chars")
 				}
 			}
 		}
