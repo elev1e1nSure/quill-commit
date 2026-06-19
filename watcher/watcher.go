@@ -154,6 +154,17 @@ func (w *Watcher) delayLoop(stableDiff string) {
 }
 
 func (w *Watcher) doCommit(message string) {
+	diff, err := w.git.Diff()
+	if err != nil {
+		w.emit(EventError, fmt.Sprintf("git diff before commit: %s", err))
+		return
+	}
+	if diff == "" {
+		w.emit(EventSkip, "diff cleared before commit, skipping")
+		w.prevDiff = ""
+		w.delayCounter = 0
+		return
+	}
 	if err := w.git.Add(); err != nil {
 		w.emit(EventError, fmt.Sprintf("git add: %s", err))
 		return
