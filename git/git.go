@@ -15,15 +15,17 @@ func Diff() (string, error) {
 }
 
 func Add() error {
-	if err := exec.Command("git", "add", "-A").Run(); err != nil {
-		return fmt.Errorf("git add: %w", err)
+	out, err := exec.Command("git", "add", "-A").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
 
 func Commit(message string) error {
-	if err := exec.Command("git", "commit", "-m", message).Run(); err != nil {
-		return fmt.Errorf("git commit: %w", err)
+	out, err := exec.Command("git", "commit", "-m", message).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
