@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,9 +17,19 @@ type Decision struct {
 }
 
 const (
-	dialTimeout  = 10 * time.Second
-	readTimeout  = 30 * time.Second
+	dialTimeout   = 10 * time.Second
+	readTimeout   = 30 * time.Second
 	openRouterURL = "https://openrouter.ai/api/v1/chat/completions"
+)
+
+type httpClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+var (
+	httpCli                 httpClient = &http.Client{Timeout: dialTimeout + readTimeout}
+	openRouterModelsURL                = "https://openrouter.ai/api/v1/models"
+	cacheCapabilityTimeout            = dialTimeout
 )
 
 func Ask(diff, model, apiKey string) (Decision, error) {
@@ -61,11 +72,7 @@ Example: fix(ai): trim whitespace from model response`
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	client := &http.Client{
-		Timeout: dialTimeout + readTimeout,
-	}
-
-	resp, err := client.Do(req)
+	resp, err := httpCli.Do(req)
 	if err != nil {
 		return Decision{Commit: false, Delay: 1}, err
 	}
@@ -98,6 +105,51 @@ Example: fix(ai): trim whitespace from model response`
 	}
 
 	return decision, nil
+}
+
+func CacheCapability(model, apiKey string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), cacheCapabilityTimeout)
+	defer cancel()
+
+	url := openRouterModelsURL + "/" + model
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := httpCli.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return false, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Data *struct {
+			SupportedParameters *[]string `json:"supported_parameters"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false, fmt.Errorf("decode response: %w", err)
+	}
+
+	if result.Data == nil || result.Data.SupportedParameters == nil {
+		return false, nil
+	}
+
+	for _, param := range *result.Data.SupportedParameters {
+		if param == "cache_control" {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func fallback() Decision {
