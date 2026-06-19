@@ -96,9 +96,31 @@ func EnsureDefault(path string) (Config, bool, error) {
 	if !os.IsNotExist(err) {
 		return Config{}, false, fmt.Errorf("load config: %w", err)
 	}
+
 	cfg = Default()
-	if err := Save(path, cfg); err != nil {
-		return Config{}, false, err
+	data, err := toml.Marshal(cfg)
+	if err != nil {
+		return Config{}, false, fmt.Errorf("marshal config: %w", err)
 	}
+
+	// Atomic create — O_EXCL fails if another process already created the file
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		if os.IsExist(err) {
+			// Another process won the race — reload their config
+			cfg, err := Load(path)
+			if err != nil {
+				return Config{}, false, fmt.Errorf("reload after race: %w", err)
+			}
+			return cfg, true, nil
+		}
+		return Config{}, false, fmt.Errorf("create config: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := f.Write(data); err != nil {
+		return Config{}, false, fmt.Errorf("write config: %w", err)
+	}
+
 	return cfg, true, nil
 }
