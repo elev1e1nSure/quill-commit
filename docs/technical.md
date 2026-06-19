@@ -15,10 +15,10 @@
 
 ## git/
 
-- [ ] `Diff() (string, error)` — runs `git diff HEAD`, returns output
-- [ ] `Add() error` — runs `git add -A`
-- [ ] `Commit(message string) error` — runs `git commit -m`
-- [ ] Startup check: `git rev-parse --git-dir` → exit if not a git repo
+- [x] `Diff() (string, error)` — runs `git diff HEAD`, returns output
+- [x] `Add() error` — runs `git add -A`
+- [x] `Commit(message string) error` — runs `git commit -m`
+- [x] Startup check: `git rev-parse --git-dir` → exit if not a git repo
 
 ## ai/
 
@@ -74,3 +74,4 @@
 - [x] ~~Read `quill.toml` from cwd; create with defaults if missing~~
 - [x] ~~`.golangci.yml` config~~
 - [x] ~~`just build` produces working binary~~
+- [x] ~~`git Diff()`, `Add()`, `Commit()`, `IsRepo()`~~
