@@ -108,7 +108,7 @@ func Save(path string, cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil
@@ -134,7 +134,7 @@ func EnsureDefault(path string) (Config, bool, error) {
 	}
 
 	// Atomic create — O_EXCL fails if another process already created the file
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		if os.IsExist(err) {
 			// Another process won the race — reload their config

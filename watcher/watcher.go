@@ -272,19 +272,35 @@ func (w *Watcher) doAmend() {
 		w.emit(EventError, fmt.Sprintf("amend: git diff: %s", err))
 		return
 	}
-	if diff == "" {
-		w.emit(EventInfo, "amend: nothing to add")
-		return
-	}
+
 	original, err := w.git.HeadMessage()
 	if err != nil {
 		w.emit(EventError, fmt.Sprintf("amend: git log: %s", err))
 		return
 	}
 
-	userPrompt := "Original commit message:\n" + original + "\n\nAdditional diff:\n" + diff
+	if diff == "" && original == "" {
+		w.emit(EventInfo, "amend: nothing to amend")
+		return
+	}
+
+	var (
+		systemPrompt string
+		userPrompt   string
+		hasDiff      bool
+	)
+
+	if diff == "" {
+		systemPrompt = ai.AmendRewritePrompt
+		userPrompt = "Original commit message:\n" + original
+	} else {
+		systemPrompt = ai.AmendBasePrompt
+		userPrompt = "Original commit message:\n" + original + "\n\nAdditional diff:\n" + diff
+		hasDiff = true
+	}
+
 	req := ai.Request{
-		SystemPrompt:  ai.AmendBasePrompt,
+		SystemPrompt:  systemPrompt,
 		UserPrompt:    userPrompt,
 		Model:         w.cfg.Model,
 		APIKey:        w.apiKey,
@@ -299,9 +315,11 @@ func (w *Watcher) doAmend() {
 		return
 	}
 
-	if err := w.git.Add(); err != nil {
-		w.emit(EventError, fmt.Sprintf("amend: git add: %s", err))
-		return
+	if hasDiff {
+		if err := w.git.Add(); err != nil {
+			w.emit(EventError, fmt.Sprintf("amend: git add: %s", err))
+			return
+		}
 	}
 	if err := w.git.AmendCommit(decision.Message); err != nil {
 		w.emit(EventError, fmt.Sprintf("amend: git commit --amend: %s", err))

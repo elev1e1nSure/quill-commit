@@ -30,6 +30,9 @@ const (
 const AmendBasePrompt = `You are amending a git commit. Given the original commit message and the additional diff being added to it, write a single updated commit message covering all changes.
 Return ONLY json without markdown: {"commit": true, "delay": 0, "message": "type(scope): description"}`
 
+const AmendRewritePrompt = `You are improving a git commit message. Given the original commit message, rewrite it to be clearer, more descriptive, and follow Conventional Commits format.
+Return ONLY json without markdown: {"commit": true, "delay": 0, "message": "type(scope): description"}`
+
 const BasePrompt = `You are an automatic git committer.
 You receive a git diff. Decide if a logical unit of work is complete.
 Return ONLY json without markdown:

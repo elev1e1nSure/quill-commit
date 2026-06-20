@@ -43,7 +43,7 @@ func TestLoadCreatesDefault(t *testing.T) {
 
 func TestLoadInvalidToml(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "invalid.toml")
-	if err := os.WriteFile(tmp, []byte("invalid toml"), 0644); err != nil {
+	if err := os.WriteFile(tmp, []byte("invalid toml"), 0600); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
 	}
 	_, err := Load(tmp)
@@ -95,7 +95,7 @@ func TestSaveAndLoad(t *testing.T) {
 
 func TestLoadDefaultsInvalidValues(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "quill.toml")
-	if err := os.WriteFile(tmp, []byte("interval = -1\nmax_delays = -1\nmodel = \"\""), 0644); err != nil {
+	if err := os.WriteFile(tmp, []byte("interval = -1\nmax_delays = -1\nmodel = \"\""), 0600); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
 	}
 	cfg, err := Load(tmp)
@@ -116,7 +116,7 @@ func TestLoadDefaultsInvalidValues(t *testing.T) {
 func TestLoadContextDefaults(t *testing.T) {
 	// Case 1: Load with include_context=false explicitly set, should stay false
 	tmp1 := filepath.Join(t.TempDir(), "config1.toml")
-	if err := os.WriteFile(tmp1, []byte("include_context = false\n"), 0644); err != nil {
+	if err := os.WriteFile(tmp1, []byte("include_context = false\n"), 0600); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
 	}
 	cfg1, err := Load(tmp1)
@@ -139,7 +139,7 @@ func TestLoadContextDefaults(t *testing.T) {
 
 	// Case 2: Missing fields entirely should apply defaults
 	tmp2 := filepath.Join(t.TempDir(), "config2.toml")
-	if err := os.WriteFile(tmp2, []byte(""), 0644); err != nil {
+	if err := os.WriteFile(tmp2, []byte(""), 0600); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
 	}
 	cfg2, err := Load(tmp2)
@@ -158,7 +158,7 @@ func TestLoadContextDefaults(t *testing.T) {
 
 	// Case 3: Invalid values (<= 0) should trigger zero-guards
 	tmp3 := filepath.Join(t.TempDir(), "config3.toml")
-	if err := os.WriteFile(tmp3, []byte("context_budget = 0\nrecent_commits = -1\n"), 0644); err != nil {
+	if err := os.WriteFile(tmp3, []byte("context_budget = 0\nrecent_commits = -1\n"), 0600); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
 	}
 	cfg3, err := Load(tmp3)

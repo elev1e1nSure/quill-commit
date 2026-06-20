@@ -73,7 +73,7 @@ func TestRecentCommitsThree(t *testing.T) {
 	defer cleanup()
 	for i := 0; i < 3; i++ {
 		content := fmt.Sprintf("content %d", i)
-		os.WriteFile("f.txt", []byte(content), 0644) //nolint:errcheck
+		os.WriteFile("f.txt", []byte(content), 0600) //nolint:errcheck
 		exec.Command("git", "add", "f.txt").Run()    //nolint:errcheck
 		exec.Command("git", "commit", "-m", "commit").Run() //nolint:errcheck
 	}
@@ -98,7 +98,7 @@ func TestRecentCommitsThree(t *testing.T) {
 func TestStatusShortClean(t *testing.T) {
 	_, cleanup := newTempRepo(t)
 	defer cleanup()
-	os.WriteFile("a.txt", []byte("x"), 0644) //nolint:errcheck
+	os.WriteFile("a.txt", []byte("x"), 0600) //nolint:errcheck
 	exec.Command("git", "add", "a.txt").Run() //nolint:errcheck
 	exec.Command("git", "commit", "-m", "init").Run() //nolint:errcheck
 	got, err := StatusShort()
@@ -113,10 +113,10 @@ func TestStatusShortClean(t *testing.T) {
 func TestStatusShortDirty(t *testing.T) {
 	_, cleanup := newTempRepo(t)
 	defer cleanup()
-	os.WriteFile("a.txt", []byte("x"), 0644) //nolint:errcheck
+	os.WriteFile("a.txt", []byte("x"), 0600) //nolint:errcheck
 	exec.Command("git", "add", "a.txt").Run() //nolint:errcheck
 	exec.Command("git", "commit", "-m", "init").Run() //nolint:errcheck
-	os.WriteFile("b.txt", []byte("y"), 0644) //nolint:errcheck
+	os.WriteFile("b.txt", []byte("y"), 0600) //nolint:errcheck
 	got, err := StatusShort()
 	if err != nil {
 		t.Fatalf("StatusShort() err: %v", err)
@@ -130,9 +130,9 @@ func TestLsFiles(t *testing.T) {
 	_, cleanup := newTempRepo(t)
 	defer cleanup()
 	os.MkdirAll("sub/deep", 0755)             //nolint:errcheck
-	os.WriteFile("top.txt", []byte("a"), 0644)           //nolint:errcheck
-	os.WriteFile("sub/mid.txt", []byte("b"), 0644)       //nolint:errcheck
-	os.WriteFile("sub/deep/bot.txt", []byte("c"), 0644)  //nolint:errcheck
+	os.WriteFile("top.txt", []byte("a"), 0600)           //nolint:errcheck
+	os.WriteFile("sub/mid.txt", []byte("b"), 0600)       //nolint:errcheck
+	os.WriteFile("sub/deep/bot.txt", []byte("c"), 0600)  //nolint:errcheck
 	exec.Command("git", "add", "-A").Run()                //nolint:errcheck
 	exec.Command("git", "commit", "-m", "init").Run()     //nolint:errcheck
 	got, err := LsFiles()
