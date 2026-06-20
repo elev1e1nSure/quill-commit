@@ -98,6 +98,13 @@ func (realAI) Ask(req ai.Request) (ai.Decision, ai.Usage, error) {
 	return ai.Ask(req)
 }
 
+// sessionEntry records a single "wait" decision made by the model for a given diff.
+type sessionEntry struct {
+	at     time.Time
+	delay  int
+	reason string
+}
+
 // Watcher coordinates the scheduler, stabilizer, commit engine, context manager
 // and event logger. It keeps the public API (Events, Cmds, Run, Close) and the
 // test hook methods (tick, delayLoop, doAmend).
@@ -119,6 +126,11 @@ type Watcher struct {
 	// even if the diff briefly changed and came back. Cleared on successful commit.
 	blockedDiffHashes map[string]struct{}
 
+	// sessionLog tracks the model's prior "wait" decisions for each diff hash
+	// within the current session. Injected into subsequent prompts so the model
+	// sees its own history and doesn't flip-flop. Cleared after each commit.
+	sessionLog map[string][]sessionEntry
+
 	// quarantine prevents infinite loops when the working directory only contains
 	// secret files that are filtered out. We remember the excluded fingerprint
 	// and silently skip until normal files appear.
@@ -137,6 +149,38 @@ type Watcher struct {
 	cancel context.CancelFunc
 
 	logFile *os.File
+}
+
+// recordWait stores a model "wait" decision for the given diff hash.
+func (w *Watcher) recordWait(hash string, delay int, reason string) {
+	if w.sessionLog == nil {
+		w.sessionLog = make(map[string][]sessionEntry)
+	}
+	w.sessionLog[hash] = append(w.sessionLog[hash], sessionEntry{
+		at:     time.Now(),
+		delay:  delay,
+		reason: reason,
+	})
+}
+
+// formatHistory returns a human-readable block of prior decisions for the given
+// diff hash, ready to prepend to the model's user prompt.
+func (w *Watcher) formatHistory(hash string) string {
+	entries := w.sessionLog[hash]
+	if len(entries) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "PRIOR DECISIONS (this diff, reviewed %d time(s) this session):\n", len(entries))
+	for _, e := range entries {
+		ts := e.at.Format("15:04:05")
+		if e.reason != "" {
+			fmt.Fprintf(&b, "• %s — wait %ds — %q\n", ts, e.delay, e.reason)
+		} else {
+			fmt.Fprintf(&b, "• %s — wait %ds\n", ts, e.delay)
+		}
+	}
+	return b.String()
 }
 
 // New creates a Watcher for the given configuration.
@@ -339,9 +383,13 @@ func (w *Watcher) tick() {
 
 // delayLoop asks the model and handles commit: false delays without recursion.
 // After each sleep it re-checks the diff; if it changed, stabilization resets.
+// Prior "wait" decisions are injected into each subsequent prompt so the model
+// sees its own history and doesn't flip-flop within a session.
 func (w *Watcher) delayLoop(stableDiff string) {
+	hash := diffHash(stableDiff)
 	for {
-		req, dynErr := w.ctxMgr.BuildRequest(w.ctx, stableDiff)
+		history := w.formatHistory(hash)
+		req, dynErr := w.ctxMgr.BuildRequest(w.ctx, stableDiff, history)
 		if dynErr != nil {
 			w.emit(EventInfo, fmt.Sprintf("warn: context.BuildDynamic: %s", dynErr))
 		}
@@ -379,11 +427,20 @@ func (w *Watcher) delayLoop(stableDiff string) {
 			return
 		}
 
+		delay := decision.Delay
+		if delay <= 0 {
+			delay = 30
+		}
+
+		// Record this "wait" decision before sleeping so the next iteration
+		// can show the model what it already concluded.
+		w.recordWait(hash, delay, decision.Reason)
+
 		w.delayCounter++
 		if w.cfg.MaxDelays > 0 {
-			w.emit(EventDecision, fmt.Sprintf("model says wait %ds (delay %d/%d)", decision.Delay, w.delayCounter, w.cfg.MaxDelays))
+			w.emit(EventDecision, fmt.Sprintf("model says wait %ds (delay %d/%d)", delay, w.delayCounter, w.cfg.MaxDelays))
 		} else {
-			w.emit(EventDecision, fmt.Sprintf("model says wait %ds (delay %d)", decision.Delay, w.delayCounter))
+			w.emit(EventDecision, fmt.Sprintf("model says wait %ds (delay %d)", delay, w.delayCounter))
 		}
 
 		if w.cfg.MaxDelays > 0 && w.delayCounter >= w.cfg.MaxDelays {
@@ -394,10 +451,6 @@ func (w *Watcher) delayLoop(stableDiff string) {
 			return
 		}
 
-		delay := decision.Delay
-		if delay <= 0 {
-			delay = 30
-		}
 		w.emit(EventDelay, fmt.Sprintf("retry in %ds", delay))
 		w.sleepFn(time.Duration(delay) * time.Second)
 
@@ -422,6 +475,7 @@ func (w *Watcher) resetAfterCommit() {
 	w.delayCounter = 0
 	w.blockedDiffHashes = nil
 	w.quarantineFingerprint = ""
+	w.sessionLog = nil
 }
 
 // blockDiff records the hash of a diff that failed a commit so future ticks

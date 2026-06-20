@@ -57,10 +57,12 @@ func newContextManager(ctx context.Context, cfg config.Config, apiKey string, re
 	return cm
 }
 
-// BuildRequest creates an ai.Request for the given diff. The returned error,
-// if non-nil, is a non-fatal dynamic-context build error that the caller should
+// BuildRequest creates an ai.Request for the given diff. history, if non-empty,
+// is a formatted block of prior model decisions that gets prepended to the user
+// prompt so the model sees its own session context. The returned error, if
+// non-nil, is a non-fatal dynamic-context build error that the caller should
 // log but not fail on.
-func (cm *ContextManager) BuildRequest(ctx context.Context, diff string) (ai.Request, error) {
+func (cm *ContextManager) BuildRequest(ctx context.Context, diff string, history string) (ai.Request, error) {
 	var sysPrompt string
 	var userPrompt string
 	var dynErr error
@@ -73,6 +75,10 @@ func (cm *ContextManager) BuildRequest(ctx context.Context, diff string) (ai.Req
 	} else {
 		sysPrompt = ai.PromptForStrategy(cm.cfg.Strategy)
 		userPrompt = diff
+	}
+
+	if history != "" {
+		userPrompt = history + "\n\n" + userPrompt
 	}
 
 	req := ai.Request{
