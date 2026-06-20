@@ -11,9 +11,15 @@ import (
 )
 
 type Decision struct {
-	Commit  bool   `json:"commit"`
-	Delay   int    `json:"delay"`
-	Message string `json:"message"`
+	Commit  bool          `json:"commit"`
+	Delay   int           `json:"delay"`
+	Message string        `json:"message"`
+	Commits []CommitGroup `json:"commits"`
+}
+
+type CommitGroup struct {
+	Files   []string `json:"files"`
+	Message string   `json:"message"`
 }
 
 const (
@@ -27,7 +33,11 @@ Return ONLY json without markdown: {"commit": true, "delay": 0, "message": "type
 const BasePrompt = `You are an automatic git committer.
 You receive a git diff. Decide if a logical unit of work is complete.
 Return ONLY json without markdown:
-{"commit": bool, "delay": int (minutes if commit false), "message": string (if commit true)}`
+{"commit": bool, "delay": int (minutes if commit false), "message": string (if commit true)}
+
+If the diff contains several INDEPENDENT changes belonging to different scopes (e.g. a bugfix in one package and unrelated docs in another), split them into atomic commits instead of one.
+In that case return: {"commit": true, "commits": [{"files": ["path/a.go"], "message": "type(scope): description"}, {"files": ["docs/x.md"], "message": "docs: description"}]}
+Use exact file paths from the diff. Only split when changes are genuinely unrelated — when in doubt, return a single commit.`
 
 type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)

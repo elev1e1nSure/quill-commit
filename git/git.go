@@ -119,6 +119,12 @@ func Add() error {
 	return err
 }
 
+func AddPaths(paths []string) error {
+	args := append([]string{"add", "--"}, paths...)
+	_, err := runGit(args...)
+	return err
+}
+
 func Commit(message string) error {
 	_, err := runGitWithStdin(message, "commit", "-F", "-")
 	return err

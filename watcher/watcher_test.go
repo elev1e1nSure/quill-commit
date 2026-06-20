@@ -15,11 +15,12 @@ import (
 // --- fakes ---
 
 type fakeGit struct {
-	diffs   []string
-	diffIdx int
-	added   bool
-	commits []string
-	diffErr error
+	diffs      []string
+	diffIdx    int
+	added      bool
+	addedPaths []string
+	commits    []string
+	diffErr    error
 }
 
 func (f *fakeGit) Diff() (string, error) {
@@ -34,10 +35,11 @@ func (f *fakeGit) Diff() (string, error) {
 	return d, nil
 }
 
-func (f *fakeGit) Add() error                        { f.added = true; return nil }
-func (f *fakeGit) Commit(msg string) error           { f.commits = append(f.commits, msg); return nil }
-func (f *fakeGit) HeadMessage() (string, error)      { return "", nil }
-func (f *fakeGit) AmendCommit(msg string) error      { f.commits = append(f.commits, "amend:"+msg); return nil }
+func (f *fakeGit) Add() error                   { f.added = true; return nil }
+func (f *fakeGit) AddPaths(paths []string) error { f.addedPaths = append(f.addedPaths, paths...); return nil }
+func (f *fakeGit) Commit(msg string) error       { f.commits = append(f.commits, msg); return nil }
+func (f *fakeGit) HeadMessage() (string, error)  { return "", nil }
+func (f *fakeGit) AmendCommit(msg string) error  { f.commits = append(f.commits, "amend:"+msg); return nil }
 
 type fakeAI struct {
 	responses []ai.Decision
@@ -384,19 +386,17 @@ func TestWatcher_CacheMissesState(t *testing.T) {
 		t.Fatalf("expected 5 requests in a single tick delayLoop, got %d", len(requests))
 	}
 
-	// 1st request should be full size
-	if len(requests[0].SystemPrompt) < 1200 {
-		t.Errorf("expected long 1st request, got len %d", len(requests[0].SystemPrompt))
+	// 4th request (index 3) must be shrunk relative to the full 1st request
+	// because we had 3 consecutive misses (static budget capped at 800).
+	if len(requests[3].SystemPrompt) >= len(requests[0].SystemPrompt) {
+		t.Errorf("expected shrunk 4th request (%d) to be smaller than 1st (%d)",
+			len(requests[3].SystemPrompt), len(requests[0].SystemPrompt))
 	}
 
-	// 4th request (index 3) must be shrunk because we had 3 misses
-	if len(requests[3].SystemPrompt) > 1040 {
-		t.Errorf("expected shrunk 4th request, got len %d", len(requests[3].SystemPrompt))
-	}
-
-	// 5th request (index 4) should be restored to full because 4th request was a hit
-	if len(requests[4].SystemPrompt) < 1200 {
-		t.Errorf("expected restored 5th request, got len %d", len(requests[4].SystemPrompt))
+	// 5th request (index 4) should be restored to full because 4th request was a hit.
+	if len(requests[4].SystemPrompt) != len(requests[0].SystemPrompt) {
+		t.Errorf("expected restored 5th request (%d) to match full 1st (%d)",
+			len(requests[4].SystemPrompt), len(requests[0].SystemPrompt))
 	}
 }
 

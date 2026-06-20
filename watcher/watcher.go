@@ -67,6 +67,7 @@ func newEvent(kind EventKind, msg string) Event {
 type gitOps interface {
 	Diff() (string, error)
 	Add() error
+	AddPaths(paths []string) error
 	Commit(message string) error
 	HeadMessage() (string, error)
 	AmendCommit(message string) error
@@ -78,11 +79,12 @@ type aiOps interface {
 
 type realGit struct{}
 
-func (realGit) Diff() (string, error)             { return git.Diff() }
-func (realGit) Add() error                         { return git.Add() }
-func (realGit) Commit(message string) error        { return git.Commit(message) }
-func (realGit) HeadMessage() (string, error)       { return git.HeadMessage() }
-func (realGit) AmendCommit(message string) error   { return git.AmendCommit(message) }
+func (realGit) Diff() (string, error)           { return git.Diff() }
+func (realGit) Add() error                       { return git.Add() }
+func (realGit) AddPaths(paths []string) error    { return git.AddPaths(paths) }
+func (realGit) Commit(message string) error      { return git.Commit(message) }
+func (realGit) HeadMessage() (string, error)     { return git.HeadMessage() }
+func (realGit) AmendCommit(message string) error { return git.AmendCommit(message) }
 
 type realAI struct{}
 
@@ -341,6 +343,11 @@ func (w *Watcher) delayLoop(stableDiff string) {
 		}
 
 		if decision.Commit {
+			if len(decision.Commits) > 1 {
+				w.emit(EventDecision, fmt.Sprintf("model says split into %d commits", len(decision.Commits)))
+				w.doSplit(decision.Commits)
+				return
+			}
 			w.emit(EventDecision, fmt.Sprintf("model says commit: %s", decision.Message))
 			w.doCommit(decision.Message)
 			return
@@ -375,6 +382,48 @@ func (w *Watcher) delayLoop(stableDiff string) {
 			return
 		}
 	}
+}
+
+// doSplit commits each group sequentially, staging only that group's files.
+// Any files the model omitted are swept into a final commit so nothing is left behind.
+func (w *Watcher) doSplit(groups []ai.CommitGroup) {
+	committed := false
+	for _, g := range groups {
+		if len(g.Files) == 0 || g.Message == "" {
+			continue
+		}
+		if err := w.git.AddPaths(g.Files); err != nil {
+			w.emit(EventError, fmt.Sprintf("split: git add %v: %s", g.Files, err))
+			continue
+		}
+		if err := w.git.Commit(g.Message); err != nil {
+			w.emit(EventSkip, "split: pre-commit hooks failed, retrying next tick")
+			w.prevDiff = ""
+			w.delayCounter = 0
+			return
+		}
+		w.emit(EventCommit, g.Message)
+		committed = true
+	}
+
+	// Sweep any leftover changes the model didn't assign to a group.
+	leftover, err := w.git.Diff()
+	if err == nil && leftover != "" {
+		if err := w.git.Add(); err == nil {
+			if err := w.git.Commit("chore: commit remaining changes"); err == nil {
+				w.emit(EventCommit, "chore: commit remaining changes")
+				committed = true
+			}
+		}
+	}
+
+	if !committed {
+		// Nothing landed — fall back so the cycle doesn't silently lose work.
+		w.doCommit("auto: fallback commit")
+		return
+	}
+	w.prevDiff = ""
+	w.delayCounter = 0
 }
 
 func (w *Watcher) doCommit(message string) {
