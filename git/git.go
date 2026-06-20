@@ -124,6 +124,15 @@ func Commit(message string) error {
 	return err
 }
 
+func HeadMessage() (string, error) {
+	return runGit("log", "-1", "--format=%B")
+}
+
+func AmendCommit(message string) error {
+	_, err := runGitWithStdin(message, "commit", "--amend", "-F", "-")
+	return err
+}
+
 func IsRepo() bool {
 	_, err := runGit("rev-parse", "--git-dir")
 	return err == nil

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"quill-commit/ai"
@@ -20,6 +21,7 @@ const (
 	EventSending
 	EventDecision
 	EventCommit
+	EventAmend
 	EventForced
 	EventError
 	EventSkip
@@ -32,11 +34,24 @@ var EventKindNames = map[EventKind]string{
 	EventSending:  "EventSending",
 	EventDecision: "EventDecision",
 	EventCommit:   "EventCommit",
+	EventAmend:    "EventAmend",
 	EventForced:   "EventForced",
 	EventError:    "EventError",
 	EventSkip:     "EventSkip",
 	EventDelay:    "EventDelay",
 	EventInfo:     "EventInfo",
+}
+
+type CmdKind int
+
+const (
+	CmdPause CmdKind = iota
+	CmdResume
+	CmdAmend
+)
+
+type Cmd struct {
+	Kind CmdKind
 }
 
 type Event struct {
@@ -53,6 +68,8 @@ type gitOps interface {
 	Diff() (string, error)
 	Add() error
 	Commit(message string) error
+	HeadMessage() (string, error)
+	AmendCommit(message string) error
 }
 
 type aiOps interface {
@@ -61,9 +78,11 @@ type aiOps interface {
 
 type realGit struct{}
 
-func (realGit) Diff() (string, error)       { return git.Diff() }
-func (realGit) Add() error                  { return git.Add() }
-func (realGit) Commit(message string) error { return git.Commit(message) }
+func (realGit) Diff() (string, error)             { return git.Diff() }
+func (realGit) Add() error                         { return git.Add() }
+func (realGit) Commit(message string) error        { return git.Commit(message) }
+func (realGit) HeadMessage() (string, error)       { return git.HeadMessage() }
+func (realGit) AmendCommit(message string) error   { return git.AmendCommit(message) }
 
 type realAI struct{}
 
@@ -75,9 +94,12 @@ type Watcher struct {
 	cfg    config.Config
 	apiKey string
 	Events chan Event
+	Cmds   chan Cmd
 
 	git gitOps
 	ai  aiOps
+
+	paused atomic.Bool
 
 	prevDiff     string
 	delayCounter int
@@ -129,6 +151,7 @@ func New(cfg config.Config, apiKey string, repoRoot string) *Watcher {
 		cfg:           cfg,
 		apiKey:        apiKey,
 		Events:        make(chan Event, 64),
+		Cmds:          make(chan Cmd, 8),
 		git:           realGit{},
 		ai:            realAI{},
 		static:        static,
@@ -143,9 +166,74 @@ func (w *Watcher) Run() {
 	ticker := time.NewTicker(time.Duration(w.cfg.Interval * float64(time.Minute)))
 	defer ticker.Stop()
 
-	for range ticker.C {
-		w.tick()
+	for {
+		select {
+		case <-ticker.C:
+			if !w.paused.Load() {
+				w.tick()
+			}
+		case cmd := <-w.Cmds:
+			w.handleCmd(cmd)
+		}
 	}
+}
+
+func (w *Watcher) handleCmd(cmd Cmd) {
+	switch cmd.Kind {
+	case CmdPause:
+		w.paused.Store(true)
+		w.emit(EventInfo, "paused")
+	case CmdResume:
+		w.paused.Store(false)
+		w.emit(EventInfo, "resumed")
+	case CmdAmend:
+		w.doAmend()
+	}
+}
+
+func (w *Watcher) doAmend() {
+	diff, err := w.git.Diff()
+	if err != nil {
+		w.emit(EventError, fmt.Sprintf("amend: git diff: %s", err))
+		return
+	}
+	if diff == "" {
+		w.emit(EventInfo, "amend: nothing to add")
+		return
+	}
+	original, err := w.git.HeadMessage()
+	if err != nil {
+		w.emit(EventError, fmt.Sprintf("amend: git log: %s", err))
+		return
+	}
+
+	userPrompt := "Original commit message:\n" + original + "\n\nAdditional diff:\n" + diff
+	req := ai.Request{
+		SystemPrompt:  ai.AmendBasePrompt,
+		UserPrompt:    userPrompt,
+		Model:         w.cfg.Model,
+		APIKey:        w.apiKey,
+		SessionID:     w.sessionID,
+		ExplicitCache: false,
+	}
+
+	w.emit(EventSending, "asking model (amend)")
+	decision, _, err := w.ai.Ask(req)
+	if err != nil {
+		w.emit(EventError, fmt.Sprintf("amend: ai error: %s", err))
+		return
+	}
+
+	if err := w.git.Add(); err != nil {
+		w.emit(EventError, fmt.Sprintf("amend: git add: %s", err))
+		return
+	}
+	if err := w.git.AmendCommit(decision.Message); err != nil {
+		w.emit(EventError, fmt.Sprintf("amend: git commit --amend: %s", err))
+		return
+	}
+	w.emit(EventAmend, decision.Message)
+	w.prevDiff = ""
 }
 
 func (w *Watcher) tick() {

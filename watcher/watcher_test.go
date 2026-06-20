@@ -34,8 +34,10 @@ func (f *fakeGit) Diff() (string, error) {
 	return d, nil
 }
 
-func (f *fakeGit) Add() error                  { f.added = true; return nil }
-func (f *fakeGit) Commit(msg string) error      { f.commits = append(f.commits, msg); return nil }
+func (f *fakeGit) Add() error                        { f.added = true; return nil }
+func (f *fakeGit) Commit(msg string) error           { f.commits = append(f.commits, msg); return nil }
+func (f *fakeGit) HeadMessage() (string, error)      { return "", nil }
+func (f *fakeGit) AmendCommit(msg string) error      { f.commits = append(f.commits, "amend:"+msg); return nil }
 
 type fakeAI struct {
 	responses []ai.Decision

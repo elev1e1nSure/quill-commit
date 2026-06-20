@@ -142,7 +142,7 @@ func main() {
 	w := watcher.New(cfg, apiKey, repoRoot)
 	go w.Run()
 
-	p := tea.NewProgram(ui.New(cfg, w.Events), tea.WithAltScreen())
+	p := tea.NewProgram(ui.New(cfg, w.Events, w.Cmds), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)

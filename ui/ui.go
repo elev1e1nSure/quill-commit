@@ -27,8 +27,8 @@ var (
 )
 
 // statusBlockHeight is the fixed line count of the rendered status block
-// (top border + title + 4 rows + bottom border = 7).
-const statusBlockHeight = 6
+// (top border + title + 4 content rows + hints row + bottom border = 8).
+const statusBlockHeight = 8
 
 // boxOverhead is the total horizontal chars added by boxStyle (2 borders + 2 padding each side = 4).
 const boxOverhead = 4
@@ -38,9 +38,12 @@ type eventMsg watcher.Event
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
+type quitResetMsg struct{}
+
 type Model struct {
 	cfg          config.Config
 	events       <-chan watcher.Event
+	cmds         chan<- watcher.Cmd
 	nextCheck    time.Time
 	delayCounter int
 	lastCommit   string
@@ -53,12 +56,16 @@ type Model struct {
 	sending      bool
 	stabilizing  bool
 	pulseTick    bool
+	paused       bool
+	amending     bool
+	quitPending  bool
 }
 
-func New(cfg config.Config, events <-chan watcher.Event) Model {
+func New(cfg config.Config, events <-chan watcher.Event, cmds chan<- watcher.Cmd) Model {
 	return Model{
 		cfg:       cfg,
 		events:    events,
+		cmds:      cmds,
 		nextCheck: time.Now().Add(time.Duration(cfg.Interval * float64(time.Minute))),
 	}
 }
@@ -85,10 +92,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case quitResetMsg:
+		m.quitPending = false
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
-			return m, tea.Quit
+			if m.quitPending {
+				return m, tea.Quit
+			}
+			m.quitPending = true
+			return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg { return quitResetMsg{} })
+		case "p":
+			if m.paused {
+				m.paused = false
+				m.sendCmd(watcher.Cmd{Kind: watcher.CmdResume})
+			} else {
+				m.paused = true
+				m.sendCmd(watcher.Cmd{Kind: watcher.CmdPause})
+			}
+		case "a":
+			if !m.amending {
+				m.amending = true
+				m.sendCmd(watcher.Cmd{Kind: watcher.CmdAmend})
+			}
 		}
 
 	case tea.WindowSizeMsg:
@@ -133,6 +160,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func (m *Model) sendCmd(cmd watcher.Cmd) {
+	select {
+	case m.cmds <- cmd:
+	default:
+	}
+}
+
 func (m *Model) applyEvent(e watcher.Event) {
 	ts := stDim.Render(e.Time.Format("15:04"))
 
@@ -164,6 +198,18 @@ func (m *Model) applyEvent(e watcher.Event) {
 			}
 		}
 
+	case watcher.EventAmend:
+		m.amending = false
+		m.sending = false
+		hash := git.HeadHash()
+		if hash != "" {
+			m.lastCommit = stAccent2.Render(hash) + " " + stText.Render(e.Message)
+			m.log = append(m.log, ts+"  "+stDim.Render("amended")+"  "+stAccent2.Render(hash)+" "+stText.Render(e.Message))
+		} else {
+			m.lastCommit = stText.Render(e.Message)
+			m.log = append(m.log, ts+"  "+stDim.Render("amended")+"  "+stText.Render(e.Message))
+		}
+
 	case watcher.EventCommit:
 		m.sending = false
 		m.stabilizing = false
@@ -186,6 +232,7 @@ func (m *Model) applyEvent(e watcher.Event) {
 	case watcher.EventError:
 		m.sending = false
 		m.stabilizing = false
+		m.amending = false
 		m.delayCounter = 0
 		m.log = append(m.log, ts+"  "+stText.Render(e.Message))
 
@@ -233,6 +280,10 @@ func (m Model) renderStatus() string {
 	var nextStr string
 	spinner := stAccent2.Render(spinnerFrames[m.spinnerFrame])
 	switch {
+	case m.paused:
+		nextStr = stWarn.Render("PAUSED")
+	case m.amending:
+		nextStr = spinner + " " + stAccent2.Render("amending...")
 	case m.sending:
 		nextStr = spinner + " " + stAccent2.Render("asking model...")
 	case remaining <= 0:
@@ -256,12 +307,25 @@ func (m Model) renderStatus() string {
 		lastCommit = stDim.Render(dot) + " " + lastCommit
 	}
 
+	pauseKey := "p: pause"
+	if m.paused {
+		pauseKey = "p: resume"
+	}
+	var hintsStr string
+	if m.quitPending {
+		hintsStr = stWarn.Render("press q / ctrl+c again to quit")
+	} else {
+		hintsStr = stDim.Render(fmt.Sprintf("%s  a: amend  q: quit", pauseKey))
+	}
+
 	lbl := func(s string) string { return stDim.Render(fmt.Sprintf("%-12s", s)) }
 	rows := strings.Join([]string{
 		stTitle.Render("info"),
 		lbl("status") + "  " + nextStr,
 		lbl("delays") + "  " + stText.Render(fmt.Sprintf("%d / %d", m.delayCounter, m.cfg.MaxDelays)),
 		lbl("last commit") + "  " + lastCommit,
+		"",
+		hintsStr,
 	}, "\n")
 
 	return boxStyle.Width(m.width - boxOverhead).Render(rows)
