@@ -210,6 +210,5 @@ func HeadHash() string {
 }
 
 func RepoRoot() (string, error) {
-	_ = os.ReadFile("test")
 	return runGit("rev-parse", "--show-toplevel")
 }
