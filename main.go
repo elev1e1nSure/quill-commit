@@ -1,21 +1,13 @@
 package main
 
 import (
-	"context"
-	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"quill-commit/config"
 	"quill-commit/credentials"
-	"quill-commit/git"
-	"quill-commit/ui"
-	"quill-commit/watcher"
 )
 
 var version = "dev"
@@ -57,117 +49,40 @@ func main() {
 }
 
 func run() error {
-	flag.CommandLine.Init(flag.CommandLine.Name(), flag.ContinueOnError)
-	flag.CommandLine.SetOutput(&strings.Builder{})
-
-	apiKeyFlag := flag.String("api-key", "", "OpenRouter API key (saved to credentials file for future runs)")
-	modelFlag := flag.String("model", "", "model override (overrides quill.toml)")
-	intervalFlag := flag.Float64("interval", 0, "check interval in minutes (overrides quill.toml)")
-	stabilizeFlag := flag.Float64("stabilize", 0, "stabilization re-check interval in minutes (overrides quill.toml)")
-	maxDelaysFlag := flag.Int("max-delays", 0, "max consecutive delays before forced commit (overrides quill.toml)")
-	presetFlag := flag.String("preset", "", "config preset: active (default), deep, aggressive")
-	versionFlag := flag.Bool("version", false, "print version and exit")
-
-	if len(os.Args) == 1 {
-		printUsage()
-		return nil
-	}
-
-	err := flag.CommandLine.Parse(os.Args[1:])
-	if err != nil {
-		if err == flag.ErrHelp {
-			printUsage()
-			return nil
-		}
+	cli := &CLI{}
+	if err := cli.Parse(); err != nil {
 		printUsage()
 		return err
 	}
-
-	if *versionFlag {
+	if cli.ShowUsage {
+		printUsage()
+		return nil
+	}
+	if cli.Version {
 		fmt.Println("quill-commit", version)
 		return nil
 	}
 
-	apiKey := resolveAPIKey(*apiKeyFlag)
+	creds := &CredentialResolver{FlagValue: cli.APIKey}
+	apiKey, shouldSave, err := creds.Resolve()
+	if err != nil {
+		return err
+	}
 	if apiKey == "" {
 		return fmt.Errorf("API key required — pass --api-key, set QUILL_API_KEY, or run once with --api-key to save it")
 	}
-	if *apiKeyFlag != "" {
-		if err := credentials.Save(*apiKeyFlag); err != nil {
+	if shouldSave {
+		if err := credentials.Save(cli.APIKey); err != nil {
 			fmt.Fprintf(os.Stderr, "warn: could not save api key: %v\n", err)
 		}
 	}
 
-	repoRoot, err := git.RepoRoot()
-	if err != nil {
-		return fmt.Errorf("get git repo root: %w", err)
-	}
-
-	configPath := filepath.Join(repoRoot, config.FileName)
-	cfg, created, err := config.EnsureDefault(configPath)
+	cfgResolver := &ConfigResolver{CLI: *cli}
+	cfg, repoRoot, err := cfgResolver.Resolve()
 	if err != nil {
 		return err
 	}
-	if created {
-		fmt.Printf("created %s with defaults\n", configPath)
-	}
 
-	dirty := false
-	if *presetFlag != "" {
-		if !config.ApplyPreset(&cfg, *presetFlag) {
-			return fmt.Errorf("unknown preset %q — valid presets: active, deep, aggressive", *presetFlag)
-		}
-		dirty = true
-	}
-	if *modelFlag != "" {
-		cfg.Model = *modelFlag
-		dirty = true
-	}
-	if *intervalFlag > 0 {
-		cfg.Interval = *intervalFlag
-		dirty = true
-	}
-	if *stabilizeFlag > 0 {
-		cfg.Stabilize = *stabilizeFlag
-		dirty = true
-	}
-	if *maxDelaysFlag > 0 {
-		cfg.MaxDelays = *maxDelaysFlag
-		dirty = true
-	}
-	if dirty {
-		if err := config.Save(configPath, cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "warn: could not save config: %v\n", err)
-		}
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	w := watcher.New(ctx, cfg, apiKey, repoRoot)
-	defer w.Close()
-	go w.Run()
-
-	p := tea.NewProgram(ui.New(cfg, w.Events, w.Cmds), tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
-		return err
-	}
-	return nil
-}
-
-// resolveAPIKey returns the first non-empty value from:
-// --api-key flag → QUILL_API_KEY env → credentials file.
-func resolveAPIKey(flag string) string {
-	if flag != "" {
-		return flag
-	}
-	if env := os.Getenv("QUILL_API_KEY"); env != "" {
-		return env
-	}
-	stored, err := credentials.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warn: could not read credentials: %v\n", err)
-		return ""
-	}
-	return stored
+	app := &App{cfg: cfg, apiKey: apiKey, repoRoot: repoRoot}
+	return app.Run()
 }
