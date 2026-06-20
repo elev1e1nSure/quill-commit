@@ -70,7 +70,13 @@ type Model struct {
 	amending     bool
 	quitPending  bool
 
-	handlers *UpdateHandlers
+	// errorRaw holds the raw git/hook error text from the last EventCommitError.
+	// errorFix holds the AI-suggested fix from the subsequent EventErrorExplain.
+	errorRaw  string
+	errorFix  string
+	showDetail bool
+
+	handlers  *UpdateHandlers
 	presenter *Presenter
 	renderer  *Renderer
 }
@@ -169,9 +175,13 @@ func (m Model) View() string {
 	if !m.ready {
 		return "\n  " + stDim.Render("initializing...")
 	}
+	middle := m.renderer.LogBlock(&m)
+	if m.showDetail && m.errorRaw != "" {
+		middle = m.renderer.DetailOverlay(&m)
+	}
 	return m.renderer.JoinView(
 		m.renderer.Status(&m),
-		m.renderer.LogBlock(&m),
+		middle,
 		m.renderer.Hints(&m),
 	)
 }

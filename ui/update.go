@@ -48,6 +48,10 @@ func (h *UpdateHandlers) HandleKey(msg tea.KeyMsg) tea.Cmd {
 			m.amending = true
 			m.sendCmd(watcher.Cmd{Kind: watcher.CmdAmend})
 		}
+	case "ctrl+o":
+		if m.errorRaw != "" {
+			m.showDetail = !m.showDetail
+		}
 	}
 	return nil
 }
@@ -95,6 +99,9 @@ func (h *UpdateHandlers) HandleEvent(msg eventMsg) tea.Cmd {
 		m.sending = false
 		m.stabilizing = false
 		m.amending = false
+		m.errorRaw = ""
+		m.errorFix = ""
+		m.showDetail = false
 		if e.Kind == watcher.EventCommit {
 			m.delayCounter = 0
 			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))

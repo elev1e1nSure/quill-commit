@@ -8,6 +8,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+var stDetail = lipgloss.NewStyle().Foreground(lipgloss.Color("#A0A0A0"))
+
 // Renderer draws the UI components.
 type Renderer struct{}
 
@@ -80,7 +82,50 @@ func (r *Renderer) Hints(m *Model) string {
 		return stText.Render(key) + stDim.Render(": "+desc)
 	}
 	sep := stDim.Render("   ")
-	return "  " + hint("p", pauseDesc) + sep + hint("a", "amend") + sep + hint("q", "quit")
+	base := "  " + hint("p", pauseDesc) + sep + hint("a", "amend") + sep + hint("q", "quit")
+	if m.errorRaw != "" {
+		detailDesc := "details"
+		if m.showDetail {
+			detailDesc = "close"
+		}
+		base += sep + hint("ctrl+o", detailDesc)
+	}
+	return base
+}
+
+// DetailOverlay renders the error detail pane that replaces the log block.
+func (r *Renderer) DetailOverlay(m *Model) string {
+	var sb strings.Builder
+	sb.WriteString(stTitle.Render("error detail") + "\n")
+
+	lines := strings.Split(m.errorRaw, "\n")
+	maxLines := m.vp.Height
+	if m.errorFix != "" {
+		maxLines -= 3
+	}
+	if maxLines < 2 {
+		maxLines = 2
+	}
+
+	if len(lines) > maxLines {
+		for _, l := range lines[:maxLines] {
+			sb.WriteString(stDetail.Render(l) + "\n")
+		}
+		sb.WriteString(stDim.Render(fmt.Sprintf("... (%d more lines)", len(lines)-maxLines)))
+	} else {
+		for i, l := range lines {
+			sb.WriteString(stDetail.Render(l))
+			if i < len(lines)-1 {
+				sb.WriteString("\n")
+			}
+		}
+	}
+
+	if m.errorFix != "" {
+		sb.WriteString("\n\n" + stTitle.Render("suggestion") + "\n" + stText.Render(m.errorFix))
+	}
+
+	return boxStyle.Width(m.width - boxOverhead).Render(sb.String())
 }
 
 // JoinView composes the three blocks vertically.

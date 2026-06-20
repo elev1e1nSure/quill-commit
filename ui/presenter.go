@@ -80,6 +80,19 @@ func (p *Presenter) ApplyEvent(m *Model, e watcher.Event) (logEntry string) {
 
 	case watcher.EventInfo:
 		return ts + "  " + stDim.Render(e.Message)
+
+	case watcher.EventCommitError:
+		m.sending = false
+		m.stabilizing = false
+		m.errorRaw = e.Detail
+		m.errorFix = ""
+		m.showDetail = false
+		return ts + "  " + stWarn.Render("commit blocked") + "  " + stDim.Render("ctrl+o for details")
+
+	case watcher.EventErrorExplain:
+		m.sending = false
+		m.errorFix = e.Detail
+		return ts + "  " + stDim.Render("explain: ") + stText.Render(e.Message)
 	}
 
 	return ""
