@@ -19,9 +19,9 @@ vendor/
 Thumbs.db
 
 # Local config with secrets
-quill.toml
-.env
-.env.*
+# quill.toml
+# .env
+# .env.*
 
 # Logs
 *.log
