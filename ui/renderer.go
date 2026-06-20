@@ -21,24 +21,25 @@ func newRenderer() *Renderer {
 func (r *Renderer) Status(m *Model) string {
 	remaining := time.Until(m.nextCheck)
 	var nextStr string
-	spinner := stAccent2.Render(spinnerFrames[m.spinnerFrame])
+	spinnerDim := stDim.Render(spinnerFrames[m.spinnerFrame])
+	spinnerAccent := stAccent2.Render(spinnerFrames[m.spinnerFrame])
 	switch {
 	case m.paused:
 		nextStr = stWarn.Render("PAUSED")
 	case m.amending:
-		nextStr = spinner + " " + stAccent2.Render("rewriting...")
+		nextStr = spinnerAccent + " " + stAccent2.Render("rewriting...")
 	case m.sending:
-		nextStr = spinner + " " + stAccent2.Render("pondering...")
+		nextStr = spinnerAccent + " " + stAccent2.Render("pondering...")
 	case remaining <= 0:
-		nextStr = spinner + " " + stAccent2.Render("checking...")
+		nextStr = spinnerDim + " " + stText.Render("checking...")
 	case m.stabilizing:
-		nextStr = spinner + " " + stAccent2.Render("watching...")
+		nextStr = spinnerDim + " " + stText.Render("watching...")
 	default:
 		durStr := fmt.Sprintf("%ds", int(remaining.Seconds()))
 		if int(remaining.Minutes()) > 0 {
 			durStr = fmt.Sprintf("%dm %ds", int(remaining.Minutes()), int(remaining.Seconds())%60)
 		}
-		nextStr = spinner + " " + stAccent2.Render("waiting ("+durStr+")")
+		nextStr = spinnerDim + " " + stDim.Render("waiting ("+durStr+")")
 	}
 
 	lastCommit := m.lastCommit
