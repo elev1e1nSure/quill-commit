@@ -2,20 +2,15 @@ package watcher
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync/atomic"
 	"time"
 
 	"quill-commit/ai"
 	"quill-commit/config"
-	gitcontext "quill-commit/context"
 	"quill-commit/git"
 )
 
@@ -65,10 +60,6 @@ type Event struct {
 	Time    time.Time
 }
 
-func newEvent(kind EventKind, msg string) Event {
-	return Event{Kind: kind, Message: msg, Time: time.Now()}
-}
-
 type gitOps interface {
 	Diff() (string, error)
 	Add() error
@@ -97,80 +88,38 @@ func (realAI) Ask(req ai.Request) (ai.Decision, ai.Usage, error) {
 	return ai.Ask(req)
 }
 
+// Watcher coordinates the scheduler, stabilizer, commit engine, context manager
+// and event logger. It keeps the public API (Events, Cmds, Run, Close) and the
+// test hook methods (tick, delayLoop, doAmend).
 type Watcher struct {
-	cfg    config.Config
-	apiKey string
-	Events chan Event
-	Cmds   chan Cmd
+	cfg     config.Config
+	apiKey  string
+	Events  chan Event
+	Cmds    chan Cmd
 
 	git gitOps
 	ai  aiOps
 
-	paused atomic.Bool
-
+	// Test-visible state. These are manipulated by watcher_test.go.
 	prevDiff     string
 	delayCounter int
 
-	// Context fields
-	static        gitcontext.Static
-	staticBudget  int
-	fullBudget    int
-	sessionID     string
-	explicitCache bool
-	cacheMisses   int
+	sleepFn func(time.Duration)
 
-	sleepFn       func(time.Duration)
-	repoRoot      string
+	scheduler   *Scheduler
+	stabilizer  *Stabilizer
+	commitEng   *CommitEngine
+	ctxMgr      *ContextManager
+	eventLogger *EventLogger
 
-	ctx           context.Context
-	cancel        context.CancelFunc
+	ctx    context.Context
+	cancel context.CancelFunc
 
-	logFile       *os.File
-	logger        *slog.Logger
+	logFile *os.File
 }
 
+// New creates a Watcher for the given configuration.
 func New(ctx context.Context, cfg config.Config, apiKey string, repoRoot string) *Watcher {
-	var static gitcontext.Static
-	var sessionID string
-	var explicitCache bool
-	var staticBudget, fullBudget int
-
-	if cfg.IncludeContext {
-		var err error
-		static, err = gitcontext.BuildStatic(repoRoot)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "warn: context.BuildStatic:", err)
-		}
-
-		if cfg.SessionID != "" {
-			sessionID = cfg.SessionID
-		} else {
-			b := make([]byte, 16)
-			if _, err := rand.Read(b); err != nil {
-				fmt.Fprintln(os.Stderr, "warn: generate session_id:", err)
-				now := time.Now().UnixNano()
-				for i := 0; i < 8; i++ {
-					b[i] = byte(now >> (i * 8))
-				}
-				pid := os.Getpid()
-				for i := 0; i < 4; i++ {
-					b[8+i] = byte(pid >> (i * 8))
-				}
-			}
-			sessionID = hex.EncodeToString(b)
-		}
-
-		var capErr error
-		explicitCache, capErr = ai.CacheCapabilityFn(cfg.Model, apiKey)
-		if capErr != nil {
-			fmt.Fprintln(os.Stderr, "warn: CacheCapability:", capErr)
-			explicitCache = false
-		}
-
-		staticBudget = cfg.ContextBudget
-		fullBudget = cfg.ContextBudget
-	}
-
 	ctx, cancel := context.WithCancel(ctx)
 
 	var logFile *os.File
@@ -190,31 +139,42 @@ func New(ctx context.Context, cfg config.Config, apiKey string, repoRoot string)
 		}
 	}
 
+	events := make(chan Event, 64)
+	cmds := make(chan Cmd, 32)
+	sleepFn := func(d time.Duration) {}
+	if !isTest {
+		sleepFn = time.Sleep
+	}
+
 	w := &Watcher{
-		cfg:           cfg,
-		apiKey:        apiKey,
-		Events:        make(chan Event, 64),
-		Cmds:          make(chan Cmd, 32),
-		git:           realGit{},
-		ai:            realAI{},
-		static:        static,
-		staticBudget:  staticBudget,
-		fullBudget:    fullBudget,
-		sessionID:     sessionID,
-		explicitCache: explicitCache,
-		repoRoot:      repoRoot,
-		ctx:           ctx,
-		cancel:        cancel,
-		logFile:       logFile,
-		logger:        logger,
+		cfg:     cfg,
+		apiKey:  apiKey,
+		Events:  events,
+		Cmds:    cmds,
+		git:     realGit{},
+		ai:      realAI{},
+		sleepFn: sleepFn,
+		ctx:     ctx,
+		cancel:  cancel,
+		logFile: logFile,
 	}
-	w.sleepFn = w.sleep
-	if isTest {
-		w.sleepFn = func(_ time.Duration) {}
-	}
+
+	w.eventLogger = newEventLogger(ctx, events, logger)
+	w.stabilizer = newStabilizer(cfg, w.git, w.sleepFn)
+	w.commitEng = newCommitEngine(w.git, w.emit)
+	w.ctxMgr = newContextManager(ctx, cfg, apiKey, repoRoot)
+
+	// Scheduler ticks into w.tick and forwards other commands (e.g. Amend) back.
+	w.scheduler = newScheduler(cfg, cmds, w.tick, w.handleCmd)
+
 	return w
 }
 
+func (w *Watcher) emit(kind EventKind, msg string) {
+	w.eventLogger.Emit(kind, msg)
+}
+
+// Close stops the watcher and closes the log file.
 func (w *Watcher) Close() {
 	w.cancel()
 	if w.logFile != nil {
@@ -222,45 +182,24 @@ func (w *Watcher) Close() {
 	}
 }
 
-func (w *Watcher) sleep(d time.Duration) {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-w.ctx.Done():
-	case <-timer.C:
-	case cmd := <-w.Cmds:
-		w.handleCmd(cmd)
-	}
+// setGitAI is a test helper that swaps the git/ai adapters and propagates the
+// git adapter to the sub-components that depend on it.
+func (w *Watcher) setGitAI(g gitOps, a aiOps) {
+	w.git = g
+	w.stabilizer.git = g
+	w.commitEng.git = g
+	w.ai = a
 }
 
+// Run starts the watcher loop. It blocks until the watcher context is cancelled.
 func (w *Watcher) Run() {
-	interval := w.cfg.Interval
-	if interval <= 0 {
-		interval = config.DefaultInterval
-	}
-	ticker := time.NewTicker(time.Duration(interval * float64(time.Minute)))
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-w.ctx.Done():
-			return
-		case <-ticker.C:
-			if !w.paused.Load() {
-				w.tick()
-			}
-		case cmd := <-w.Cmds:
-			w.handleCmd(cmd)
-		}
-	}
+	w.scheduler.Run(w.ctx)
 }
 
+// handleCmd dispatches watcher commands. Currently only CmdAmend is handled here;
+// pause/resume are processed by the scheduler.
 func (w *Watcher) handleCmd(cmd Cmd) {
 	switch cmd.Kind {
-	case CmdPause:
-		w.paused.Store(true)
-	case CmdResume:
-		w.paused.Store(false)
 	case CmdAmend:
 		w.doAmend()
 	}
@@ -304,7 +243,7 @@ func (w *Watcher) doAmend() {
 		UserPrompt:    userPrompt,
 		Model:         w.cfg.Model,
 		APIKey:        w.apiKey,
-		SessionID:     w.sessionID,
+		SessionID:     w.ctxMgr.sessionID,
 		ExplicitCache: false,
 		Ctx:           w.ctx,
 	}
@@ -316,18 +255,9 @@ func (w *Watcher) doAmend() {
 		return
 	}
 
-	if hasDiff {
-		if err := w.git.Add(); err != nil {
-			w.emit(EventError, fmt.Sprintf("amend: git add: %s", err))
-			return
-		}
+	if err := w.commitEng.Amend(decision.Message, hasDiff); err == nil {
+		w.prevDiff = ""
 	}
-	if err := w.git.AmendCommit(decision.Message); err != nil {
-		w.emit(EventError, fmt.Sprintf("amend: git commit --amend: %s", err))
-		return
-	}
-	w.emit(EventAmend, decision.Message)
-	w.prevDiff = ""
 }
 
 func (w *Watcher) tick() {
@@ -344,70 +274,29 @@ func (w *Watcher) tick() {
 		w.emit(EventSkip, "diff empty, waiting")
 		w.prevDiff = ""
 		w.delayCounter = 0
-		w.sleepFn(2 * time.Second)
 		return
 	}
 
-	for diff != w.prevDiff {
+	stableDiff, newPrevDiff, ok := w.stabilizer.Stabilize(w.prevDiff, func() {
 		w.emit(EventSkip, fmt.Sprintf("diff changed, re-checking in %s", formatDuration(w.cfg.Stabilize)))
-		w.sleepFn(2 * time.Second)
-		w.prevDiff = diff
-		w.sleepFn(time.Duration(w.cfg.Stabilize * float64(time.Minute)))
-		diff, err = w.git.Diff()
-		if err != nil {
-			w.emit(EventError, fmt.Sprintf("git diff: %s", err))
-			return
-		}
-		if diff == "" {
-			w.emit(EventSkip, "diff cleared during stabilization")
-			w.prevDiff = ""
-			return
-		}
+	})
+	if !ok {
+		w.emit(EventSkip, "diff cleared during stabilization")
+		w.prevDiff = ""
+		return
 	}
+	w.prevDiff = newPrevDiff
 
-	w.delayLoop(diff)
-}
-
-func formatDuration(minutes float64) string {
-	d := time.Duration(minutes * float64(time.Minute))
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	}
-	m := int(d.Minutes())
-	s := int(d.Seconds()) % 60
-	if s == 0 {
-		return fmt.Sprintf("%dm", m)
-	}
-	return fmt.Sprintf("%dm%ds", m, s)
+	w.delayLoop(stableDiff)
 }
 
 // delayLoop asks the model and handles commit: false delays without recursion.
 // After each sleep it re-checks the diff; if it changed, stabilization resets.
 func (w *Watcher) delayLoop(stableDiff string) {
 	for {
-		var sysPrompt string
-		var userPrompt string
-
-		if w.cfg.IncludeContext {
-			dyn, dynErr := gitcontext.BuildDynamic(w.cfg.RecentCommitsCount)
-			if dynErr != nil {
-				w.emit(EventInfo, fmt.Sprintf("warn: context.BuildDynamic: %s", dynErr))
-			}
-			sysPrompt = ai.BasePrompt + "\n\n---\n\n" + gitcontext.RenderSystem(w.static, w.staticBudget)
-			userPrompt = gitcontext.RenderUser(dyn, stableDiff)
-		} else {
-			sysPrompt = ai.BasePrompt
-			userPrompt = stableDiff
-		}
-
-		req := ai.Request{
-			SystemPrompt:  sysPrompt,
-			UserPrompt:    userPrompt,
-			Model:         w.cfg.Model,
-			APIKey:        w.apiKey,
-			SessionID:     w.sessionID,
-			ExplicitCache: w.explicitCache,
-			Ctx:           w.ctx,
+		req, dynErr := w.ctxMgr.BuildRequest(w.ctx, stableDiff)
+		if dynErr != nil {
+			w.emit(EventInfo, fmt.Sprintf("warn: context.BuildDynamic: %s", dynErr))
 		}
 
 		w.emit(EventSending, "asking model")
@@ -420,32 +309,20 @@ func (w *Watcher) delayLoop(stableDiff string) {
 			return
 		}
 
-		if w.cfg.IncludeContext {
-			if usage.CachedTokens > 0 {
-				if w.cacheMisses > 0 || w.staticBudget < w.fullBudget {
-					w.cacheMisses = 0
-					w.staticBudget = w.fullBudget
-				}
-			} else {
-				w.cacheMisses++
-				if w.cacheMisses >= 3 && w.staticBudget > 800 {
-					w.staticBudget = 800
-					if w.staticBudget > w.fullBudget {
-						w.staticBudget = w.fullBudget
-					}
-					w.cacheMisses = 0
-				}
-			}
-		}
+		w.ctxMgr.UpdateBudget(usage)
 
 		if decision.Commit {
 			if len(decision.Commits) > 1 {
 				w.emit(EventDecision, fmt.Sprintf("model says split into %d commits", len(decision.Commits)))
-				w.doSplit(decision.Commits)
+				if err := w.commitEng.Split(decision.Commits); err == nil {
+					w.resetAfterCommit()
+				}
 				return
 			}
 			w.emit(EventDecision, fmt.Sprintf("model says commit: %s", decision.Message))
-			w.doCommit(decision.Message)
+			if err := w.commitEng.Commit(decision.Message); err == nil {
+				w.resetAfterCommit()
+			}
 			return
 		}
 
@@ -458,7 +335,9 @@ func (w *Watcher) delayLoop(stableDiff string) {
 
 		if w.cfg.MaxDelays > 0 && w.delayCounter >= w.cfg.MaxDelays {
 			w.emit(EventForced, "max delays reached, forcing commit")
-			w.doCommit("auto: forced commit")
+			if err := w.commitEng.Commit("auto: forced commit"); err == nil {
+				w.resetAfterCommit()
+			}
 			return
 		}
 
@@ -484,110 +363,7 @@ func (w *Watcher) delayLoop(stableDiff string) {
 	}
 }
 
-// doSplit commits each group sequentially, staging only that group's files.
-// Any files the model omitted are swept into a final commit so nothing is left behind.
-func (w *Watcher) doSplit(groups []ai.CommitGroup) {
-	committed := false
-	for _, g := range groups {
-		var cleanFiles []string
-		for _, f := range g.Files {
-			f = strings.TrimSpace(f)
-			if f != "" {
-				cleanFiles = append(cleanFiles, f)
-			}
-		}
-		if len(cleanFiles) == 0 || g.Message == "" {
-			continue
-		}
-		if err := w.git.AddPaths(cleanFiles); err != nil {
-			w.emit(EventError, fmt.Sprintf("split: git add %v: %s", cleanFiles, err))
-			continue
-		}
-		if err := w.git.Commit(g.Message); err != nil {
-			w.emit(EventSkip, fmt.Sprintf("split: commit failed: %s", err))
-			w.prevDiff = ""
-			w.delayCounter = 0
-			return
-		}
-		w.emit(EventCommit, g.Message)
-		committed = true
-	}
-
-	// Sweep any leftover changes the model didn't assign to a group.
-	leftover, err := w.git.Diff()
-	if err == nil && leftover != "" {
-		if err := w.git.Add(); err == nil {
-			if err := w.git.Commit("chore: commit remaining changes"); err == nil {
-				w.emit(EventCommit, "chore: commit remaining changes")
-				committed = true
-			}
-		}
-	}
-
-	if !committed {
-		// Nothing landed — fall back so the cycle doesn't silently lose work.
-		w.doCommit("auto: fallback commit")
-		return
-	}
+func (w *Watcher) resetAfterCommit() {
 	w.prevDiff = ""
 	w.delayCounter = 0
-}
-
-func (w *Watcher) doCommit(message string) {
-	diff, err := w.git.Diff()
-	if err != nil {
-		w.emit(EventError, fmt.Sprintf("git diff before commit: %s", err))
-		w.prevDiff = ""
-		w.delayCounter = 0
-		return
-	}
-	if diff == "" {
-		w.emit(EventSkip, "diff cleared before commit, skipping")
-		w.prevDiff = ""
-		w.delayCounter = 0
-		return
-	}
-	if err := w.git.Add(); err != nil {
-		w.emit(EventError, fmt.Sprintf("git add: %s", err))
-		w.prevDiff = ""
-		w.delayCounter = 0
-		return
-	}
-	if err := w.git.Commit(message); err != nil {
-		w.emit(EventSkip, fmt.Sprintf("commit failed: %s", err))
-		w.prevDiff = ""
-		w.delayCounter = 0
-		return
-	}
-	w.emit(EventCommit, message)
-	w.prevDiff = ""
-	w.delayCounter = 0
-}
-
-func (w *Watcher) emit(kind EventKind, msg string) {
-	name, ok := EventKindNames[kind]
-	if !ok {
-		name = fmt.Sprintf("UnknownEvent(%d)", kind)
-	}
-
-	if w.logger != nil {
-		var level slog.Level
-		switch kind {
-		case EventError:
-			level = slog.LevelError
-		case EventForced:
-			level = slog.LevelWarn
-		case EventCheck, EventSkip:
-			level = slog.LevelDebug
-		default:
-			level = slog.LevelInfo
-		}
-		w.logger.Log(w.ctx, level, msg, slog.String("event", name))
-	}
-
-	select {
-	case w.Events <- newEvent(kind, msg):
-	default:
-		fmt.Fprintf(os.Stderr, "warn: event channel full, dropped %s: %s\n", name, msg)
-	}
 }

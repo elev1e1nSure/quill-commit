@@ -73,8 +73,7 @@ func (f *fakeAI) Ask(req ai.Request) (ai.Decision, ai.Usage, error) {
 func newTestWatcher(g *fakeGit, a *fakeAI) *Watcher {
 	cfg := config.Config{Interval: 10, Stabilize: 0, MaxDelays: 3, Model: "test"}
 	w := New(context.Background(), cfg, "key", "")
-	w.git = g
-	w.ai = a
+	w.setGitAI(g, a)
 	w.sleepFn = func(_ time.Duration) {} // mock sleep to be instantaneous
 	return w
 }
@@ -263,8 +262,7 @@ func TestWatcherSessionID(t *testing.T) {
 	g := &fakeGit{diffs: []string{"diff-x"}}
 
 	w := New(context.Background(), cfg, "key", t.TempDir())
-	w.git = g
-	w.ai = a
+	w.setGitAI(g, a)
 	w.prevDiff = "diff-x"
 
 	w.delayLoop("diff-x")
@@ -313,8 +311,7 @@ func TestWatcher_IncludeContext_HappyPath(t *testing.T) {
 	g := &fakeGit{diffs: []string{"diff-x"}}
 
 	w := New(context.Background(), cfg, "key", tmpDir)
-	w.git = g
-	w.ai = a
+	w.setGitAI(g, a)
 	w.prevDiff = "diff-x"
 
 	w.tick()
@@ -375,8 +372,7 @@ func TestWatcher_CacheMissesState(t *testing.T) {
 	g := &fakeGit{diffs: []string{"diff-x"}}
 
 	w := New(context.Background(), cfg, "key", tmpDir)
-	w.git = g
-	w.ai = a
+	w.setGitAI(g, a)
 	w.prevDiff = "diff-x"
 
 	w.tick()
@@ -419,8 +415,7 @@ func TestWatcher_IncludeContext_False(t *testing.T) {
 	g := &fakeGit{diffs: []string{"diff-x"}}
 
 	w := New(context.Background(), cfg, "key", "")
-	w.git = g
-	w.ai = a
+	w.setGitAI(g, a)
 	w.prevDiff = "diff-x"
 
 	w.tick()
@@ -470,8 +465,7 @@ func TestWatcher_BuildDynamic_Fail(t *testing.T) {
 	g := &fakeGit{diffs: []string{"diff-x"}}
 
 	w := New(context.Background(), cfg, "key", t.TempDir())
-	w.git = g
-	w.ai = a
+	w.setGitAI(g, a)
 	w.prevDiff = "diff-x"
 
 	w.tick()
@@ -507,7 +501,7 @@ func TestWatcher_BuildStatic_Fail(t *testing.T) {
 	}()
 
 	w := New(context.Background(), cfg, "key", t.TempDir())
-	if w.static.Project != "" || len(w.static.Packages) != 0 {
+	if w.ctxMgr.static.Project != "" || len(w.ctxMgr.static.Packages) != 0 {
 		t.Error("expected empty Static context on failure")
 	}
 }
