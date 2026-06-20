@@ -372,7 +372,7 @@ func (w *Watcher) delayLoop(stableDiff string) {
 		if delay <= 0 {
 			delay = 30
 		}
-		w.emit(EventDelay, fmt.Sprintf("sleeping %ds before retry", delay))
+		w.emit(EventDelay, fmt.Sprintf("retry in %ds", delay))
 		w.sleepFn(time.Duration(delay) * time.Second)
 
 		currentDiff, err := w.git.Diff()

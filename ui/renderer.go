@@ -26,13 +26,13 @@ func (r *Renderer) Status(m *Model) string {
 	case m.paused:
 		nextStr = stWarn.Render("PAUSED")
 	case m.amending:
-		nextStr = spinner + " " + stAccent2.Render("amending...")
+		nextStr = spinner + " " + stAccent2.Render("rewriting...")
 	case m.sending:
-		nextStr = spinner + " " + stAccent2.Render("asking model...")
+		nextStr = spinner + " " + stAccent2.Render("pondering...")
 	case remaining <= 0:
 		nextStr = spinner + " " + stAccent2.Render("checking...")
 	case m.stabilizing:
-		nextStr = spinner + " " + stAccent2.Render("stabilizing...")
+		nextStr = spinner + " " + stAccent2.Render("watching...")
 	default:
 		durStr := fmt.Sprintf("%ds", int(remaining.Seconds()))
 		if int(remaining.Minutes()) > 0 {

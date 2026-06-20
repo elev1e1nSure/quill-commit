@@ -33,6 +33,7 @@ func (p *Presenter) ApplyEvent(m *Model, e watcher.Event) (logEntry string) {
 	case watcher.EventSending:
 		m.sending = true
 		m.stabilizing = false
+		m.statusLockedUntil = e.Time.Add(2 * time.Second)
 
 	case watcher.EventDecision:
 		m.sending = false
@@ -68,6 +69,7 @@ func (p *Presenter) ApplyEvent(m *Model, e watcher.Event) (logEntry string) {
 		case strings.Contains(e.Message, "diff changed"):
 			m.stabilizing = true
 			m.nextCheck = e.Time.Add(time.Duration(p.cfg.Stabilize * float64(time.Minute)))
+			m.statusLockedUntil = e.Time.Add(2 * time.Second)
 		case strings.Contains(e.Message, "diff empty"):
 			m.stabilizing = false
 		default:
@@ -87,12 +89,13 @@ func (p *Presenter) ApplyEvent(m *Model, e watcher.Event) (logEntry string) {
 		m.errorRaw = e.Detail
 		m.errorFix = ""
 		m.showDetail = false
+		m.statusLockedUntil = e.Time.Add(2 * time.Second)
 		return ts + "  " + stWarn.Render("commit blocked") + "  " + stDim.Render("ctrl+o for details")
 
 	case watcher.EventErrorExplain:
 		m.sending = false
 		m.errorFix = e.Detail
-		return ts + "  " + stDim.Render("explain: ") + stText.Render(e.Message)
+		return ts + "  " + stText.Render(e.Message)
 	}
 
 	return ""
