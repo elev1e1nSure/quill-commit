@@ -96,6 +96,7 @@ The TUI shows the current state, next-check timer, retry counter, and a scrollab
 
 ```toml
 model            = "deepseek/deepseek-v4-flash"
+strategy         = "standard"  # permissive | standard | strict
 interval         = 2      # minutes between checks
 stabilize        = 1      # re-check cadence while diff is still changing (minutes)
 max_delays       = 0      # force-commit after this many model "wait" responses (0 = never)
@@ -105,18 +106,30 @@ recent_commits   = 10     # recent commit messages included in context
 session_id       = ""     # OpenRouter session routing hint (auto-generated)
 ```
 
+### Commit strategies
+
+| Strategy | Behavior |
+|----------|----------|
+| `standard` *(default)* | Commit complete, reasonable units of work. Skips obviously incomplete diffs. |
+| `permissive` | Commit everything that passes filters. No quality gating — debug code, TODOs, included. |
+| `strict` | Commit only clean, atomic, purposeful changes. Rejects messy or mixed-concern diffs. |
+
+`.quillignore` and the built-in secret/binary filters apply before any strategy logic.
+
 All CLI flags override `quill.toml` and are persisted back to it.
 
 ### CLI flags
 
 | Flag | Description |
 |------|-------------|
-| `--api-key <key>` | OpenRouter API key |
-| `--preset <name>` | Apply a named preset (`active`, `deep`, `aggressive`) |
+| `--api-key <key>` | OpenRouter API key (saved to credentials file) |
+| `--preset <name>` | Timing preset: `active`, `deep`, `aggressive` |
+| `--strategy <name>` | Commit strategy: `permissive`, `standard`, `strict` |
 | `--model <name>` | LLM model to use |
 | `--interval <mins>` | Check interval in minutes |
 | `--stabilize <mins>` | Stabilization re-check interval |
-| `--max-delays <n>` | Max retries before forced commit |
+| `--max-delays <n>` | Max retries before forced commit (0 = never) |
+| `--configure` | Save settings to `quill.toml` and exit without starting |
 | `--version` | Print version and exit |
 
 ## API key resolution

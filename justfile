@@ -4,11 +4,11 @@ bin := "quill-commit" + if os_family() == "windows" { ".exe" } else { "" }
 
 [windows]
 build:
-    @go build -o {{bin}} .; $ec=$LASTEXITCODE; if ($ec -eq 0) { Write-Host "  built  " -NoNewline -ForegroundColor DarkGray; Write-Host "{{bin}}" -ForegroundColor Cyan }; exit $ec
+    @$v = git describe --tags --always --dirty 2>$null; if (-not $v) { $v = "dev" }; go build -ldflags="-X main.version=$v" -o {{bin}} .; $ec=$LASTEXITCODE; if ($ec -eq 0) { Write-Host "  built  " -NoNewline -ForegroundColor DarkGray; Write-Host "{{bin}} ($v)" -ForegroundColor Cyan }; exit $ec
 
 [unix]
 build:
-    @go build -o {{bin}} . && printf "  built  \033[96m{{bin}}\033[0m\n"
+    @v=$(git describe --tags --always --dirty 2>/dev/null || echo dev); go build -ldflags="-X main.version=$v" -o {{bin}} . && printf "  built  \033[96m{{bin}} ($v)\033[0m\n"
 
 
 [windows]

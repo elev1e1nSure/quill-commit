@@ -33,24 +33,58 @@ Return ONLY json without markdown: {"commit": true, "delay": 0, "message": "type
 const AmendRewritePrompt = `You are improving a git commit message. Given the original commit message, rewrite it to be clearer, more descriptive, and follow Conventional Commits format.
 Return ONLY json without markdown: {"commit": true, "delay": 0, "message": "type(scope): description"}`
 
-const BasePrompt = `You are an automatic git committer.
-You receive a git diff. Decide if a logical unit of work is complete.
+const promptPreamble = `You are an automatic git committer. You receive a filtered git diff and decide what to commit.
+
+Files are pre-filtered: secrets, credentials, and .quillignore patterns are already excluded before you see the diff.
+
+HARD RULES (apply in every strategy — never override these):
+- NEVER commit binary files. If the diff shows "Binary files a/... and b/... differ" for any file, that file must be excluded.
+- NEVER commit compiled build artifacts: executables, object files (.o, .a, .lib, .exe, .dll, .so, .dylib), generated protobuf files unless already tracked, lock file changes with no dependency update.
+- Files NOT assigned to any commit group in a split are excluded from staging — use this to drop junk files.
+
 Return ONLY json without markdown:
-{"commit": bool, "delay": int (seconds if commit false), "message": string (if commit true)}
+{"commit": bool, "delay": int (seconds when commit is false), "message": "type(scope): description (when commit is true)"}
 
-If the diff contains several INDEPENDENT changes belonging to different scopes, split them into atomic commits.
-In that case return: {"commit": true, "commits": [{"files": ["path/a.go"], "message": "type(scope): description"}, {"files": ["docs/x.md"], "message": "docs: description"}]}
-Use exact file paths from the diff.
+For split commits (independent changes in different scopes):
+{"commit": true, "commits": [{"files": ["path/a.go"], "message": "type(scope): description"}, {"files": ["docs/x.md"], "message": "docs: update readme"}]}
+Use exact file paths from the diff headers (the path after "diff --git a/").
 
-CRITICAL - WHEN TO SOLO VS SPLIT:
-- Use SOLO (single commit) if:
-  1. Changes are part of the same logical task, feature, or bugfix (e.g. modifying a struct and updating its callers/tests).
-  2. Changes are code modifications and their corresponding tests or docs.
-  3. When in doubt, always default to SOLO.
-- Use SPLIT (multiple commits) ONLY if:
-  1. Changes are completely unrelated, independent, and belong to different scopes (e.g., fixing a bug in package A and editing unrelated configs in package B).
-  2. Commits can be applied or reverted independently without breaking the build or tests.
-  3. No file paths overlap between split commits.`
+SOLO vs SPLIT:
+- SOLO: changes belong to the same task, feature, or bugfix. Code + its tests + its docs = always SOLO.
+- SPLIT: changes are completely independent, different scopes, can each be reverted alone without breaking anything.
+- When in doubt, default to SOLO.`
+
+// PromptForStrategy returns the system prompt for the given commit strategy.
+// Valid strategies: "permissive", "standard", "strict". Empty string or unknown → "standard".
+func PromptForStrategy(strategy string) string {
+	var block string
+	switch strategy {
+	case "permissive":
+		block = `STRATEGY: permissive
+Commit any non-binary, non-artifact change that reaches you.
+- Set commit: true for any meaningful diff. Do not delay for code quality reasons.
+- Debug prints, TODO comments, temp variables — include them. That is the developer's choice.
+- Split only when changes are clearly unrelated across different scopes (e.g. a bug fix in one package and unrelated config edits in another).`
+	case "strict":
+		block = `STRATEGY: strict
+Commit only clean, atomic, purposeful changes. Be demanding.
+- Delay (commit: false, delay: 120) if: the diff mixes unrelated concerns, contains debug print statements added in this diff, adds TODO/FIXME markers for unfinished work, has incomplete implementations (half-written functions, removed code with no replacement), or the purpose of the change is not clear from the diff alone.
+- Split aggressively: each commit must be independently meaningful and revertable without breaking the build.
+- Reject messy diffs — the developer should clean up before committing.
+- Commit messages must be precise. Reject vague messages like "update X" or "fix stuff" — delay instead until the change is unambiguous.`
+	default: // "standard"
+		block = `STRATEGY: standard
+Commit complete, reasonable units of work. Use common sense.
+- Delay (commit: false, delay: 60) if the diff looks incomplete: unclosed functions, obvious WIP markers ("// WIP", "// TODO: implement this"), half-removed code with no replacement.
+- Skip obvious debug noise added in this diff: console.log spam, fmt.Println debugging, scratch variables named "tmp2", "xxx", "debug".
+- DO commit: code changes together with their tests and documentation, config changes, complete features or bug fixes.
+- Split when scopes are clearly independent.`
+	}
+	return promptPreamble + "\n\n" + block
+}
+
+// BasePrompt is the standard-strategy prompt, used when no strategy is configured.
+var BasePrompt = PromptForStrategy("standard")
 
 type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)

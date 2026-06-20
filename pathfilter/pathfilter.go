@@ -15,8 +15,10 @@ type Filter struct {
 	user    []string // from .quillignore
 }
 
-// defaultSecretPatterns are hardcoded paths that should never be staged or sent to AI.
-var defaultSecretPatterns = []string{
+// defaultExcludePatterns are hardcoded paths that should never be staged or sent to AI.
+// Covers two categories: secret/credential files, and binary build artifacts.
+var defaultExcludePatterns = []string{
+	// Secrets and credentials
 	".env",
 	".env.*",
 	"*.pem",
@@ -25,12 +27,20 @@ var defaultSecretPatterns = []string{
 	"*.p12",
 	"credentials*",
 	"secrets*",
+	// Compiled binaries and build artifacts
+	"*.exe",
+	"*.dll",
+	"*.so",
+	"*.dylib",
+	"*.o",
+	"*.a",
+	"*.lib",
 }
 
-// New creates a filter with the built-in secret patterns.
+// New creates a filter with the built-in exclusion patterns.
 func New() *Filter {
 	return &Filter{
-		secrets: append([]string{}, defaultSecretPatterns...),
+		secrets: append([]string{}, defaultExcludePatterns...),
 	}
 }
 

@@ -16,6 +16,7 @@ const (
 	DefaultIncludeContext     = true
 	DefaultContextBudget      = 32000
 	DefaultRecentCommitsCount = 10
+	DefaultStrategy           = "standard"
 	FileName                  = "quill.toml"
 )
 
@@ -48,10 +49,16 @@ type Config struct {
 	Stabilize          float64 `toml:"stabilize"`
 	MaxDelays          int     `toml:"max_delays"`
 	Model              string  `toml:"model"`
+	Strategy           string  `toml:"strategy"`
 	IncludeContext     bool    `toml:"include_context"`
 	ContextBudget      int     `toml:"context_budget"`
 	RecentCommitsCount int     `toml:"recent_commits"`
 	SessionID          string  `toml:"session_id"`
+}
+
+// ValidStrategy reports whether s is a known commit strategy name.
+func ValidStrategy(s string) bool {
+	return s == "permissive" || s == "standard" || s == "strict"
 }
 
 func Default() Config {
@@ -60,6 +67,7 @@ func Default() Config {
 		Stabilize:          DefaultStabilize,
 		MaxDelays:          DefaultMaxDelays,
 		Model:              DefaultModel,
+		Strategy:           DefaultStrategy,
 		IncludeContext:     DefaultIncludeContext,
 		ContextBudget:      DefaultContextBudget,
 		RecentCommitsCount: DefaultRecentCommitsCount,
@@ -92,6 +100,9 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Model == "" {
 		cfg.Model = DefaultModel
+	}
+	if !ValidStrategy(cfg.Strategy) {
+		cfg.Strategy = DefaultStrategy
 	}
 	if cfg.ContextBudget <= 0 {
 		cfg.ContextBudget = DefaultContextBudget

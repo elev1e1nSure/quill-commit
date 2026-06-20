@@ -54,6 +54,13 @@ func (r *ConfigResolver) Resolve() (cfg config.Config, repoRoot string, err erro
 		cfg.MaxDelays = r.CLI.MaxDelays
 		dirty = true
 	}
+	if r.CLI.Strategy != "" {
+		if !config.ValidStrategy(r.CLI.Strategy) {
+			return config.Config{}, "", fmt.Errorf("unknown strategy %q — valid values: permissive, standard, strict", r.CLI.Strategy)
+		}
+		cfg.Strategy = r.CLI.Strategy
+		dirty = true
+	}
 	if dirty {
 		if saveErr := config.Save(configPath, cfg); saveErr != nil {
 			fmt.Fprintf(os.Stderr, "warn: could not save config: %v\n", saveErr)
