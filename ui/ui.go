@@ -78,6 +78,13 @@ type Model struct {
 	showDetail       bool
 	statusLockedUntil time.Time
 
+	// blockedLogIdx is the index in m.log of the pending "blocked" entry so that
+	// the EventErrorExplain can patch it in-place instead of adding a second line.
+	// -1 means no pending blocked entry.
+	blockedLogIdx     int
+	blockedTs         string
+	blockedSummary    string
+
 	handlers  *UpdateHandlers
 	presenter *Presenter
 	renderer  *Renderer
@@ -86,10 +93,11 @@ type Model struct {
 // New creates a new UI model for the given config and watcher channels.
 func New(cfg config.Config, events <-chan watcher.Event, cmds chan<- watcher.Cmd) Model {
 	m := Model{
-		cfg:       cfg,
-		events:    events,
-		cmds:      cmds,
-		nextCheck: time.Now().Add(time.Duration(cfg.Interval * float64(time.Minute))),
+		cfg:           cfg,
+		events:        events,
+		cmds:          cmds,
+		nextCheck:     time.Now().Add(time.Duration(cfg.Interval * float64(time.Minute))),
+		blockedLogIdx: -1,
 	}
 	m.presenter = newPresenter(cfg)
 	m.renderer = newRenderer()
