@@ -13,6 +13,7 @@ import (
 type Decision struct {
 	Commit  bool          `json:"commit"`
 	Delay   int           `json:"delay"`
+	Reason  string        `json:"reason"`
 	Message string        `json:"message"`
 	Commits []CommitGroup `json:"commits"`
 }
@@ -42,12 +43,14 @@ HARD RULES (apply in every strategy — never override these):
 - NEVER commit compiled build artifacts: executables, object files (.o, .a, .lib, .exe, .dll, .so, .dylib), generated protobuf files unless already tracked, lock file changes with no dependency update.
 - Files NOT assigned to any commit group in a split are excluded from staging — use this to drop junk files.
 
-Return ONLY json without markdown:
-{"commit": bool, "delay": int (seconds when commit is false), "message": "type(scope): description (when commit is true)"}
+Return ONLY json without markdown.
+When committing: {"commit": true, "message": "type(scope): description"}
+When waiting:    {"commit": false, "delay": 60, "reason": "one sentence — what is missing or wrong"}
+For split:       {"commit": true, "commits": [{"files": ["path/a.go"], "message": "type(scope): description"}, ...]}
 
-For split commits (independent changes in different scopes):
-{"commit": true, "commits": [{"files": ["path/a.go"], "message": "type(scope): description"}, {"files": ["docs/x.md"], "message": "docs: update readme"}]}
 Use exact file paths from the diff headers (the path after "diff --git a/").
+
+PRIOR DECISIONS block: if the user message begins with "PRIOR DECISIONS:", those are your own past conclusions about this exact diff. Read them before deciding. Do not reverse a prior "wait" decision unless the diff has visibly changed or enough time has passed to justify it. If you do change your decision, your "reason" must explain why.
 
 SOLO vs SPLIT:
 - SOLO: changes belong to the same task, feature, or bugfix. Code + its tests + its docs = always SOLO.
