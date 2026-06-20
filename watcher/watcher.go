@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"context"
+	"crypto/sha256"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -109,9 +110,10 @@ type Watcher struct {
 	prevDiff     string
 	delayCounter int
 
-	// commitBlockedDiff holds the diff that failed a commit (e.g. pre-commit hook).
-	// While the diff stays the same, ticks are silently skipped to avoid spam.
-	commitBlockedDiff string
+	// blockedDiffHashes is the set of diff SHA-256 prefixes that previously failed
+	// a commit (e.g. pre-commit hook). A diff whose hash is in this set is skipped
+	// even if the diff briefly changed and came back. Cleared on successful commit.
+	blockedDiffHashes map[string]struct{}
 
 	sleepFn func(time.Duration)
 
@@ -283,13 +285,10 @@ func (w *Watcher) tick() {
 
 	w.emit(EventCheck, "checking diff")
 
-	// If this exact diff already failed a commit (e.g. pre-commit hook),
-	// stay quiet and wait for the user to change something.
-	if w.commitBlockedDiff != "" {
-		if diff == w.commitBlockedDiff {
-			return
-		}
-		w.commitBlockedDiff = ""
+	// If this diff's content has already failed a commit (e.g. pre-commit hook),
+	// skip silently even if the diff temporarily changed and came back.
+	if _, blocked := w.blockedDiffHashes[diffHash(diff)]; blocked {
+		return
 	}
 
 	if diff == "" {
@@ -337,7 +336,7 @@ func (w *Watcher) delayLoop(stableDiff string) {
 			if len(decision.Commits) > 1 {
 				w.emit(EventDecision, fmt.Sprintf("model says split into %d commits", len(decision.Commits)))
 				if err := w.commitEng.Split(decision.Commits); err != nil {
-					w.commitBlockedDiff = stableDiff
+					w.blockDiff(stableDiff)
 					w.explainCommitError(err.Error())
 				} else {
 					w.resetAfterCommit()
@@ -346,7 +345,7 @@ func (w *Watcher) delayLoop(stableDiff string) {
 			}
 			w.emit(EventDecision, fmt.Sprintf("model says commit: %s", decision.Message))
 			if err := w.commitEng.Commit(decision.Message); err != nil {
-				w.commitBlockedDiff = stableDiff
+				w.blockDiff(stableDiff)
 				w.explainCommitError(err.Error())
 			} else {
 				w.resetAfterCommit()
@@ -394,7 +393,22 @@ func (w *Watcher) delayLoop(stableDiff string) {
 func (w *Watcher) resetAfterCommit() {
 	w.prevDiff = ""
 	w.delayCounter = 0
-	w.commitBlockedDiff = ""
+	w.blockedDiffHashes = nil
+}
+
+// blockDiff records the hash of a diff that failed a commit so future ticks
+// with the same content are skipped even if the diff briefly changed.
+func (w *Watcher) blockDiff(diff string) {
+	if w.blockedDiffHashes == nil {
+		w.blockedDiffHashes = make(map[string]struct{})
+	}
+	w.blockedDiffHashes[diffHash(diff)] = struct{}{}
+}
+
+// diffHash returns a short hex fingerprint of a diff string.
+func diffHash(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return fmt.Sprintf("%x", h[:8])
 }
 
 // explainCommitError asks the model to explain a commit failure (e.g. pre-commit hook)

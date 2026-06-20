@@ -52,6 +52,12 @@ func (r *Renderer) Status(m *Model) string {
 		lastCommit = stDim.Render(dot) + " " + lastCommit
 	}
 
+	// Clamp lastCommit to one line so the status block stays at statusBlockHeight.
+	// label(12) + sep(2) + box padding/border(4) = 18 chars overhead.
+	if maxW := m.width - 18; maxW > 4 && lipgloss.Width(lastCommit) > maxW {
+		lastCommit = lipgloss.NewStyle().MaxWidth(maxW - 1).Render(lastCommit) + stDim.Render("…")
+	}
+
 	lbl := func(s string) string { return stDim.Render(fmt.Sprintf("%-12s", s)) }
 	rows := strings.Join([]string{
 		stTitle.Render("info"),
