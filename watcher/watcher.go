@@ -27,19 +27,23 @@ const (
 	EventSkip
 	EventDelay
 	EventInfo
+	EventCommitError  // commit hook/script blocked the commit
+	EventErrorExplain // AI explanation of a commit error
 )
 
 var EventKindNames = map[EventKind]string{
-	EventCheck:    "EventCheck",
-	EventSending:  "EventSending",
-	EventDecision: "EventDecision",
-	EventCommit:   "EventCommit",
-	EventAmend:    "EventAmend",
-	EventForced:   "EventForced",
-	EventError:    "EventError",
-	EventSkip:     "EventSkip",
-	EventDelay:    "EventDelay",
-	EventInfo:     "EventInfo",
+	EventCheck:        "EventCheck",
+	EventSending:      "EventSending",
+	EventDecision:     "EventDecision",
+	EventCommit:       "EventCommit",
+	EventAmend:        "EventAmend",
+	EventForced:       "EventForced",
+	EventError:        "EventError",
+	EventSkip:         "EventSkip",
+	EventDelay:        "EventDelay",
+	EventInfo:         "EventInfo",
+	EventCommitError:  "EventCommitError",
+	EventErrorExplain: "EventErrorExplain",
 }
 
 type CmdKind int
@@ -57,6 +61,7 @@ type Cmd struct {
 type Event struct {
 	Kind    EventKind
 	Message string
+	Detail  string // raw error text (EventCommitError) or AI fix (EventErrorExplain)
 	Time    time.Time
 }
 
@@ -103,6 +108,10 @@ type Watcher struct {
 	// Test-visible state. These are manipulated by watcher_test.go.
 	prevDiff     string
 	delayCounter int
+
+	// commitBlockedDiff holds the diff that failed a commit (e.g. pre-commit hook).
+	// While the diff stays the same, ticks are silently skipped to avoid spam.
+	commitBlockedDiff string
 
 	sleepFn func(time.Duration)
 
@@ -161,7 +170,7 @@ func New(ctx context.Context, cfg config.Config, apiKey string, repoRoot string)
 
 	w.eventLogger = newEventLogger(ctx, events, logger)
 	w.stabilizer = newStabilizer(cfg, w.git, w.sleepFn)
-	w.commitEng = newCommitEngine(w.git, w.emit)
+	w.commitEng = newCommitEngine(w.git, w.emit, w.emitDetail)
 	w.ctxMgr = newContextManager(ctx, cfg, apiKey, repoRoot)
 
 	// Scheduler ticks into w.tick and forwards other commands (e.g. Amend) back.
@@ -172,6 +181,10 @@ func New(ctx context.Context, cfg config.Config, apiKey string, repoRoot string)
 
 func (w *Watcher) emit(kind EventKind, msg string) {
 	w.eventLogger.Emit(kind, msg)
+}
+
+func (w *Watcher) emitDetail(kind EventKind, msg, detail string) {
+	w.eventLogger.EmitDetail(kind, msg, detail)
 }
 
 // Close stops the watcher and closes the log file.
@@ -270,6 +283,15 @@ func (w *Watcher) tick() {
 
 	w.emit(EventCheck, "checking diff")
 
+	// If this exact diff already failed a commit (e.g. pre-commit hook),
+	// stay quiet and wait for the user to change something.
+	if w.commitBlockedDiff != "" {
+		if diff == w.commitBlockedDiff {
+			return
+		}
+		w.commitBlockedDiff = ""
+	}
+
 	if diff == "" {
 		w.emit(EventSkip, "diff empty, waiting")
 		w.prevDiff = ""
@@ -314,13 +336,19 @@ func (w *Watcher) delayLoop(stableDiff string) {
 		if decision.Commit {
 			if len(decision.Commits) > 1 {
 				w.emit(EventDecision, fmt.Sprintf("model says split into %d commits", len(decision.Commits)))
-				if err := w.commitEng.Split(decision.Commits); err == nil {
+				if err := w.commitEng.Split(decision.Commits); err != nil {
+					w.commitBlockedDiff = stableDiff
+					w.explainCommitError(err.Error())
+				} else {
 					w.resetAfterCommit()
 				}
 				return
 			}
 			w.emit(EventDecision, fmt.Sprintf("model says commit: %s", decision.Message))
-			if err := w.commitEng.Commit(decision.Message); err == nil {
+			if err := w.commitEng.Commit(decision.Message); err != nil {
+				w.commitBlockedDiff = stableDiff
+				w.explainCommitError(err.Error())
+			} else {
 				w.resetAfterCommit()
 			}
 			return
@@ -366,4 +394,26 @@ func (w *Watcher) delayLoop(stableDiff string) {
 func (w *Watcher) resetAfterCommit() {
 	w.prevDiff = ""
 	w.delayCounter = 0
+	w.commitBlockedDiff = ""
+}
+
+// explainCommitError asks the model to explain a commit failure (e.g. pre-commit hook)
+// and emits EventErrorExplain with a short summary and fix suggestion.
+func (w *Watcher) explainCommitError(rawErr string) {
+	req := ai.Request{
+		SystemPrompt:  ai.ExplainErrorPrompt,
+		UserPrompt:    rawErr,
+		Model:         w.cfg.Model,
+		APIKey:        w.apiKey,
+		SessionID:     w.ctxMgr.sessionID,
+		ExplicitCache: false,
+		Ctx:           w.ctx,
+	}
+	w.emit(EventSending, "asking model (explain error)")
+	expl, err := ai.AskExplain(req)
+	if err != nil {
+		w.emit(EventInfo, "could not explain error: "+err.Error())
+		return
+	}
+	w.emitDetail(EventErrorExplain, expl.Summary, expl.Fix)
 }

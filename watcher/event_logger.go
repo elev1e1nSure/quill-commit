@@ -26,6 +26,11 @@ func newEventLogger(ctx context.Context, events chan<- Event, logger *slog.Logge
 
 // Emit sends an event to the UI channel and logs it to the configured log file.
 func (el *EventLogger) Emit(kind EventKind, msg string) {
+	el.EmitDetail(kind, msg, "")
+}
+
+// EmitDetail is like Emit but also carries an optional detail string (e.g. raw error text or AI fix).
+func (el *EventLogger) EmitDetail(kind EventKind, msg, detail string) {
 	name, ok := EventKindNames[kind]
 	if !ok {
 		name = fmt.Sprintf("UnknownEvent(%d)", kind)
@@ -34,7 +39,7 @@ func (el *EventLogger) Emit(kind EventKind, msg string) {
 	if el.logger != nil {
 		var level slog.Level
 		switch kind {
-		case EventError:
+		case EventError, EventCommitError:
 			level = slog.LevelError
 		case EventForced:
 			level = slog.LevelWarn
@@ -46,13 +51,10 @@ func (el *EventLogger) Emit(kind EventKind, msg string) {
 		el.logger.Log(el.ctx, level, msg, slog.String("event", name))
 	}
 
+	e := Event{Kind: kind, Message: msg, Detail: detail, Time: time.Now()}
 	select {
-	case el.events <- newEvent(kind, msg):
+	case el.events <- e:
 	default:
 		fmt.Fprintf(os.Stderr, "warn: event channel full, dropped %s: %s\n", name, msg)
 	}
-}
-
-func newEvent(kind EventKind, msg string) Event {
-	return Event{Kind: kind, Message: msg, Time: time.Now()}
 }

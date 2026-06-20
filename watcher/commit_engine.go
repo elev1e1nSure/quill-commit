@@ -11,13 +11,14 @@ var errNoDiff = errors.New("no diff")
 
 // CommitEngine performs git operations for committing, splitting, and amending.
 type CommitEngine struct {
-	git    gitOps
-	emit   func(EventKind, string)
+	git        gitOps
+	emit       func(EventKind, string)
+	emitDetail func(EventKind, string, string)
 }
 
 // newCommitEngine creates a CommitEngine using the provided git adapter.
-func newCommitEngine(g gitOps, emit func(EventKind, string)) *CommitEngine {
-	return &CommitEngine{git: g, emit: emit}
+func newCommitEngine(g gitOps, emit func(EventKind, string), emitDetail func(EventKind, string, string)) *CommitEngine {
+	return &CommitEngine{git: g, emit: emit, emitDetail: emitDetail}
 }
 
 // Commit stages all changes and creates a single commit with the given message.
@@ -36,7 +37,7 @@ func (ce *CommitEngine) Commit(message string) error {
 		return err
 	}
 	if err := ce.git.Commit(message); err != nil {
-		ce.emit(EventSkip, "commit failed: "+err.Error())
+		ce.emitDetail(EventCommitError, "commit blocked", err.Error())
 		return err
 	}
 	ce.emit(EventCommit, message)
@@ -57,7 +58,7 @@ func (ce *CommitEngine) Split(groups []ai.CommitGroup) error {
 			continue
 		}
 		if err := ce.git.Commit(g.Message); err != nil {
-			ce.emit(EventSkip, "split: commit failed: "+err.Error())
+			ce.emitDetail(EventCommitError, "commit blocked", err.Error())
 			return err
 		}
 		ce.emit(EventCommit, g.Message)

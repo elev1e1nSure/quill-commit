@@ -254,3 +254,75 @@ func CacheCapability(model, apiKey string) (bool, error) {
 func fallback() Decision {
 	return Decision{Commit: true, Message: "auto: fallback commit"}
 }
+
+const ExplainErrorPrompt = `You are a developer assistant explaining a git pre-commit hook failure.
+Given the error output from a failed commit, provide a brief explanation and an actionable suggestion.
+Return ONLY json without markdown: {"summary": "one-line description of what failed", "fix": "short actionable suggestion"}`
+
+type Explanation struct {
+	Summary string `json:"summary"`
+	Fix     string `json:"fix"`
+}
+
+func AskExplain(req Request) (Explanation, error) {
+	messages := []any{
+		map[string]string{"role": "system", "content": ExplainErrorPrompt},
+		map[string]string{"role": "user", "content": req.UserPrompt},
+	}
+	body := map[string]any{
+		"model":    req.Model,
+		"messages": messages,
+	}
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return Explanation{}, fmt.Errorf("marshal: %w", err)
+	}
+	ctx := req.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, openRouterURL, bytes.NewReader(jsonBody))
+	if err != nil {
+		return Explanation{}, fmt.Errorf("request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+req.APIKey)
+
+	resp, err := httpCli.Do(httpReq)
+	if err != nil {
+		return Explanation{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return Explanation{}, fmt.Errorf("status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return Explanation{}, fmt.Errorf("decode: %w", err)
+	}
+	if len(result.Choices) == 0 {
+		return Explanation{}, fmt.Errorf("empty response")
+	}
+
+	content := strings.TrimSpace(result.Choices[0].Message.Content)
+	if strings.HasPrefix(content, "```") {
+		content = strings.TrimPrefix(content, "```json")
+		content = strings.TrimPrefix(content, "```")
+		content = strings.TrimSuffix(content, "```")
+		content = strings.TrimSpace(content)
+	}
+
+	var expl Explanation
+	if err := json.Unmarshal([]byte(content), &expl); err != nil {
+		return Explanation{Summary: "commit hook failed", Fix: "check the full error with ctrl+o"}, nil
+	}
+	return expl, nil
+}
