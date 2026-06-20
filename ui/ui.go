@@ -173,7 +173,17 @@ func (m *Model) syncViewport() {
 	if !m.ready {
 		return
 	}
-	m.vp.SetContent(strings.Join(m.log, "\n"))
+	// Clamp each log line to viewport width so nothing wraps and shifts the layout.
+	maxW := m.vp.Width
+	clamped := make([]string, len(m.log))
+	for i, line := range m.log {
+		if lipgloss.Width(line) > maxW {
+			clamped[i] = lipgloss.NewStyle().MaxWidth(maxW - 1).Render(line) + stDim.Render("…")
+		} else {
+			clamped[i] = line
+		}
+	}
+	m.vp.SetContent(strings.Join(clamped, "\n"))
 	m.vp.GotoBottom()
 }
 
@@ -181,12 +191,21 @@ func (m Model) View() string {
 	if !m.ready {
 		return "\n  " + stDim.Render("initializing...")
 	}
+	statusBlock := m.renderer.Status(&m)
+	// Dynamically fit the log viewport to whatever the status block actually renders to.
+	// Using a constant statusBlockHeight is fragile — any wrap in lastCommit shifts the layout.
+	vpH := m.height - lipgloss.Height(statusBlock) - footerHeight - 3
+	if vpH < 3 {
+		vpH = 3
+	}
+	m.vp.Height = vpH // value receiver — local only, just for this render pass
+
 	middle := m.renderer.LogBlock(&m)
 	if m.showDetail && m.errorRaw != "" {
 		middle = m.renderer.DetailOverlay(&m)
 	}
 	return m.renderer.JoinView(
-		m.renderer.Status(&m),
+		statusBlock,
 		middle,
 		m.renderer.Hints(&m),
 	)

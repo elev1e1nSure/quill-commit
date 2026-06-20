@@ -14,7 +14,6 @@ type Presenter struct {
 	cfg config.Config
 }
 
-// newPresenter creates a Presenter.
 func newPresenter(cfg config.Config) *Presenter {
 	return &Presenter{cfg: cfg}
 }
@@ -38,30 +37,20 @@ func (p *Presenter) ApplyEvent(m *Model, e watcher.Event) (logEntry string) {
 	case watcher.EventDecision:
 		m.sending = false
 		if !strings.Contains(e.Message, "commit:") {
-			delaySec, delayCount, maxDelays := 0, 0, 0
+			var delaySec, delayCount, maxDelays int
 			n, err := fmt.Sscanf(e.Message, "model says wait %ds (delay %d/%d)", &delaySec, &delayCount, &maxDelays)
 			if n >= 2 && err == nil {
 				m.delayCounter = delayCount
 				m.nextCheck = e.Time.Add(time.Duration(delaySec) * time.Second)
 			} else {
 				m.delayCounter++
-				if n, err := fmt.Sscanf(e.Message, "model says wait %ds", &delaySec); n == 1 && err == nil {
-					m.nextCheck = e.Time.Add(time.Duration(delaySec) * time.Second)
+				var d int
+				if n, err := fmt.Sscanf(e.Message, "model says wait %ds", &d); n == 1 && err == nil {
+					m.nextCheck = e.Time.Add(time.Duration(d) * time.Second)
 				}
 			}
 		}
-
-	case watcher.EventForced:
-		m.delayCounter = 0
-		m.nextCheck = e.Time.Add(time.Duration(p.cfg.Interval * float64(time.Minute)))
-		return ts + "  " + stWarn.Render(e.Message)
-
-	case watcher.EventError:
-		m.sending = false
-		m.stabilizing = false
-		m.amending = false
-		m.delayCounter = 0
-		return ts + "  " + stText.Render(e.Message)
+		// No log entry — decision outcome is visible in the status bar and timer.
 
 	case watcher.EventSkip:
 		m.delayCounter = 0
@@ -70,18 +59,32 @@ func (p *Presenter) ApplyEvent(m *Model, e watcher.Event) (logEntry string) {
 			m.stabilizing = true
 			m.nextCheck = e.Time.Add(time.Duration(p.cfg.Stabilize * float64(time.Minute)))
 			m.statusLockedUntil = e.Time.Add(2 * time.Second)
-		case strings.Contains(e.Message, "diff empty"):
-			m.stabilizing = false
 		default:
 			m.stabilizing = false
-			return ts + "  " + stText.Render(e.Message)
 		}
+		// No log entry — skip states are shown in the status bar ("watching...", "waiting...").
 
 	case watcher.EventDelay:
-		return ts + "  " + stDim.Render(e.Message)
+		// No log entry — retry countdown is shown in the status bar timer.
+
+	case watcher.EventForced:
+		m.delayCounter = 0
+		m.nextCheck = e.Time.Add(time.Duration(p.cfg.Interval * float64(time.Minute)))
+		return ts + "  " + stWarn.Render("forced") + "  " + stDim.Render("max delays reached, committing")
+
+	case watcher.EventError:
+		m.sending = false
+		m.stabilizing = false
+		m.amending = false
+		m.delayCounter = 0
+		return ts + "  " + stWarn.Render("error") + "  " + stDim.Render(cleanError(e.Message))
 
 	case watcher.EventInfo:
-		return ts + "  " + stDim.Render(e.Message)
+		// Only quarantine warnings are worth a log entry; other info is ambient/transient.
+		if strings.HasPrefix(e.Message, "quarantine:") {
+			body := strings.TrimPrefix(e.Message, "quarantine: ")
+			return ts + "  " + stWarn.Render("quarantine") + "  " + stDim.Render(body)
+		}
 
 	case watcher.EventCommitError:
 		m.sending = false
@@ -90,15 +93,70 @@ func (p *Presenter) ApplyEvent(m *Model, e watcher.Event) (logEntry string) {
 		m.errorFix = ""
 		m.showDetail = false
 		m.statusLockedUntil = e.Time.Add(2 * time.Second)
-		return ts + "  " + stWarn.Render("commit blocked") + "  " + stDim.Render("ctrl+o for details")
+		summary := firstMeaningfulLine(e.Detail)
+		return ts + "  " + stWarn.Render("blocked") + "  " + stDim.Render(summary) + "  " + stDim.Render("ctrl+o")
 
 	case watcher.EventErrorExplain:
 		m.sending = false
 		m.errorFix = e.Detail
-		return ts + "  " + stText.Render(e.Message)
+		return ts + "  " + stDim.Render("→") + "  " + stText.Render(e.Message)
 	}
 
 	return ""
+}
+
+// cleanError strips repetitive "op: git args: exit status N:" prefix noise
+// from git error strings, leaving a single readable line.
+func cleanError(msg string) string {
+	// Strip outer operation prefix added by formatGitError ("op: ...").
+	if idx := strings.Index(msg, ": "); idx > 0 {
+		msg = msg[idx+2:]
+	}
+	// Strip inner "git args: exit status N: " prefix from runGit.
+	if idx := strings.Index(msg, ": exit status "); idx >= 0 {
+		rest := msg[idx+2:]
+		if i2 := strings.Index(rest, ": "); i2 >= 0 {
+			msg = rest[i2+2:]
+		}
+	}
+	for _, line := range strings.Split(msg, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			return truncate(line, 80)
+		}
+	}
+	return truncate(strings.TrimSpace(msg), 80)
+}
+
+// firstMeaningfulLine finds the first non-warning, non-hint line in a raw
+// hook/git error block — what actually went wrong, not git's preamble.
+func firstMeaningfulLine(raw string) string {
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		low := strings.ToLower(line)
+		if strings.HasPrefix(low, "warning:") || strings.HasPrefix(low, "hint:") {
+			continue
+		}
+		if idx := strings.Index(line, ": exit status "); idx >= 0 {
+			rest := line[idx+2:]
+			if i2 := strings.Index(rest, ": "); i2 >= 0 {
+				line = rest[i2+2:]
+			}
+		}
+		return truncate(line, 80)
+	}
+	// Fallback: first line as-is.
+	first := strings.SplitN(strings.TrimSpace(raw), "\n", 2)[0]
+	return truncate(first, 80)
+}
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max-1] + "…"
 }
 
 func formatTimestamp(t time.Time) string {
