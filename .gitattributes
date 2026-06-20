@@ -1,2 +1,15 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Files written by Go tooling (os.WriteFile) — force LF to avoid CRLF churn on Windows
+*.toml  text eol=lf
+*.go    text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.json  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.sh    text eol=lf
+
+# Husky hook scripts must stay LF for bash on Windows
+.husky/* text eol=lf
