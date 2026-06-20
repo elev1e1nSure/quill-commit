@@ -259,10 +259,8 @@ func (w *Watcher) handleCmd(cmd Cmd) {
 	switch cmd.Kind {
 	case CmdPause:
 		w.paused.Store(true)
-		w.emit(EventInfo, "paused")
 	case CmdResume:
 		w.paused.Store(false)
-		w.emit(EventInfo, "resumed")
 	case CmdAmend:
 		w.doAmend()
 	}
