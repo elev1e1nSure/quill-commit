@@ -52,6 +52,7 @@ The `watcher/` package is tested with a mocked `gitOps` and `aiOps` to verify be
 - Failures/graceful degradation (e.g. static/dynamic context failures).
 - Split commits handling and sweep/fallback operations.
 - Interactive user commands (pausing, resuming, and manual AI-assisted amend mode).
+- Structured slog event logging (verified to be bypassed in unit tests to avoid locking `log.txt` on Windows).
 
 ## CI & Release Builds
 

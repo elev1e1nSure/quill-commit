@@ -16,7 +16,7 @@ quill-commit — a Go TUI tool that watches a git repo and auto-commits changes 
 
 - Standard Go conventions: `gofmt`, `go vet`, `golangci-lint` clean.
 - Package layout: `config/`, `git/`, `ai/`, `watcher/`, `ui/`.
-- Zero external logging libraries — `fmt.Fprint` to bubbletea model or stderr.
+- Zero external logging libraries — standard library `log/slog` for structured logging to `log.txt`, and `fmt.Fprint` to bubbletea model or stderr.
 - Errors are values, never panic.
 - HTTP client with sensible timeouts (10s connect, 30s read).
 

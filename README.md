@@ -100,6 +100,10 @@ First match wins:
 2. `QUILL_API_KEY` env var
 3. Credentials file (`~/.config/quill-commit/credentials` on Linux/macOS, `%APPDATA%\quill-commit\credentials` on Windows)
 
+## Logs
+
+The watcher writes structured, level-based logs to `log.txt` in the repository root using Go's standard library `log/slog` (categorized under `DEBUG`, `INFO`, `WARN`, and `ERROR`). This file is excluded from git diffs and automatically added to `.gitignore`.
+
 ## Docs
 
 - [Architecture](docs/architecture.md) — how the watcher, stabilization, and LLM loop work

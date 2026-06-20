@@ -44,6 +44,11 @@ The delay counter also resets to 0 if a git/AI error occurs or if a check is ski
 - `a` triggers a manual, AI-assisted commit amendment (adds current changes and amends the last commit with a merged message).
 - `q` / `ctrl+c` quits safely (requires a double-press confirmation).
 
+**Structured Event Logging.** Logs are written to `log.txt` in the repository root using Go's standard library `log/slog`.
+- To optimize disk and I/O operations, the log file is opened once at watcher startup and closed on shutdown.
+- Log events map directly to standard severities (`DEBUG`, `INFO`, `WARN`, `ERROR`), permitting straightforward filtering.
+- Logging is skipped in test runs to prevent OS file locks.
+
 ## Package layout
 
 ```
@@ -51,7 +56,7 @@ config/    Config struct, quill.toml read/write
 git/       Diff, Add, AddPaths, Commit, IsRepo, HeadHash, HeadMessage, AmendCommit, RecentCommits, StatusShort, LsFiles, RepoRoot
 context/   BuildStatic, BuildDynamic, RenderSystem, RenderUser, Hash
 ai/        OpenRouter request, Decision struct, fallback, CacheCapability
-watcher/   Ticker, stabilization, delay loop, command handling (Cmds), event emission, context/caching integration
+watcher/   Ticker, stabilization, delay loop, command handling (Cmds), event emission, context/caching integration, structured slog logging
 ui/        Bubbletea TUI — Status block + Log block + footer hints
 main.go    Flag parsing, startup checks, wires everything together
 ```
