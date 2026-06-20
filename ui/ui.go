@@ -47,6 +47,7 @@ type headHashMsg struct {
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 type quitResetMsg struct{}
+type deferredEventMsg watcher.Event
 
 // Model is the Bubble Tea model. It holds view state and delegates message
 // handling, presentation logic, and rendering to focused helpers.
@@ -72,9 +73,10 @@ type Model struct {
 
 	// errorRaw holds the raw git/hook error text from the last EventCommitError.
 	// errorFix holds the AI-suggested fix from the subsequent EventErrorExplain.
-	errorRaw  string
-	errorFix  string
-	showDetail bool
+	errorRaw         string
+	errorFix         string
+	showDetail       bool
+	statusLockedUntil time.Time
 
 	handlers  *UpdateHandlers
 	presenter *Presenter
@@ -141,6 +143,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case eventMsg:
 		cmds = append(cmds, m.handlers.HandleEvent(msg))
+
+	case deferredEventMsg:
+		cmds = append(cmds, m.handlers.HandleDeferredEvent(msg))
 
 	case headHashMsg:
 		m.handlers.HandleHeadHash(msg)

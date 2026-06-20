@@ -95,6 +95,8 @@ func (h *UpdateHandlers) HandleSpinner() tea.Cmd {
 func (h *UpdateHandlers) HandleEvent(msg eventMsg) tea.Cmd {
 	m := h.m
 	e := watcher.Event(msg)
+
+	// Commit and amend clear all active states immediately — never defer.
 	if e.Kind == watcher.EventCommit || e.Kind == watcher.EventAmend {
 		m.sending = false
 		m.stabilizing = false
@@ -102,6 +104,7 @@ func (h *UpdateHandlers) HandleEvent(msg eventMsg) tea.Cmd {
 		m.errorRaw = ""
 		m.errorFix = ""
 		m.showDetail = false
+		m.statusLockedUntil = time.Time{}
 		if e.Kind == watcher.EventCommit {
 			m.delayCounter = 0
 			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
@@ -119,11 +122,37 @@ func (h *UpdateHandlers) HandleEvent(msg eventMsg) tea.Cmd {
 		)
 	}
 
+	// Events that clear an active status are deferred if the current status
+	// hasn't been visible for the minimum 2 seconds yet.
+	if delay := time.Until(m.statusLockedUntil); delay > 0 {
+		switch e.Kind {
+		case watcher.EventDecision, watcher.EventCheck, watcher.EventError,
+			watcher.EventErrorExplain, watcher.EventInfo, watcher.EventDelay,
+			watcher.EventForced:
+			return tea.Batch(
+				listenEvent(m.events),
+				tea.Tick(delay, func(_ time.Time) tea.Msg { return deferredEventMsg(e) }),
+			)
+		}
+	}
+
 	if logEntry := m.presenter.ApplyEvent(m, e); logEntry != "" {
 		m.log = append(m.log, logEntry)
 	}
 	m.syncViewport()
 	return listenEvent(m.events)
+}
+
+// HandleDeferredEvent applies an event that was held back for the minimum
+// status display duration. Does not re-enqueue the listener (already running).
+func (h *UpdateHandlers) HandleDeferredEvent(msg deferredEventMsg) tea.Cmd {
+	m := h.m
+	e := watcher.Event(msg)
+	if logEntry := m.presenter.ApplyEvent(m, e); logEntry != "" {
+		m.log = append(m.log, logEntry)
+	}
+	m.syncViewport()
+	return nil
 }
 
 // HandleHeadHash appends a commit/amend entry to the log.
