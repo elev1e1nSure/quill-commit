@@ -31,8 +31,8 @@ func TestAskEmptyDiff(t *testing.T) {
 	if d.Commit {
 		t.Error("empty diff should not commit")
 	}
-	if d.Delay != 1 {
-		t.Errorf("expected delay 1, got %d", d.Delay)
+	if d.Delay != 30 {
+		t.Errorf("expected delay 30, got %d", d.Delay)
 	}
 	if usage.PromptTokens != 0 || usage.CachedTokens != 0 {
 		t.Errorf("expected zero usage for empty diff, got %+v", usage)

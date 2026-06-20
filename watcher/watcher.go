@@ -356,9 +356,9 @@ func (w *Watcher) delayLoop(stableDiff string) {
 
 		w.delayCounter++
 		if w.cfg.MaxDelays > 0 {
-			w.emit(EventDecision, fmt.Sprintf("model says wait %dm (delay %d/%d)", decision.Delay, w.delayCounter, w.cfg.MaxDelays))
+			w.emit(EventDecision, fmt.Sprintf("model says wait %ds (delay %d/%d)", decision.Delay, w.delayCounter, w.cfg.MaxDelays))
 		} else {
-			w.emit(EventDecision, fmt.Sprintf("model says wait %dm (delay %d)", decision.Delay, w.delayCounter))
+			w.emit(EventDecision, fmt.Sprintf("model says wait %ds (delay %d)", decision.Delay, w.delayCounter))
 		}
 
 		if w.cfg.MaxDelays > 0 && w.delayCounter >= w.cfg.MaxDelays {
@@ -371,10 +371,10 @@ func (w *Watcher) delayLoop(stableDiff string) {
 
 		delay := decision.Delay
 		if delay <= 0 {
-			delay = 1
+			delay = 30
 		}
-		w.emit(EventDelay, fmt.Sprintf("sleeping %dm before retry", delay))
-		w.sleepFn(time.Duration(delay) * time.Minute)
+		w.emit(EventDelay, fmt.Sprintf("sleeping %ds before retry", delay))
+		w.sleepFn(time.Duration(delay) * time.Second)
 
 		currentDiff, err := w.git.Diff()
 		if err != nil {

@@ -37,15 +37,15 @@ func (p *Presenter) ApplyEvent(m *Model, e watcher.Event) (logEntry string) {
 	case watcher.EventDecision:
 		m.sending = false
 		if !strings.Contains(e.Message, "commit:") {
-			delayMin, delayCount, maxDelays := 0, 0, 0
-			n, err := fmt.Sscanf(e.Message, "model says wait %dm (delay %d/%d)", &delayMin, &delayCount, &maxDelays)
+			delaySec, delayCount, maxDelays := 0, 0, 0
+			n, err := fmt.Sscanf(e.Message, "model says wait %ds (delay %d/%d)", &delaySec, &delayCount, &maxDelays)
 			if n >= 2 && err == nil {
 				m.delayCounter = delayCount
-				m.nextCheck = e.Time.Add(time.Duration(delayMin) * time.Minute)
+				m.nextCheck = e.Time.Add(time.Duration(delaySec) * time.Second)
 			} else {
 				m.delayCounter++
-				if n, err := fmt.Sscanf(e.Message, "model says wait %dm", &delayMin); n == 1 && err == nil {
-					m.nextCheck = e.Time.Add(time.Duration(delayMin) * time.Minute)
+				if n, err := fmt.Sscanf(e.Message, "model says wait %ds", &delaySec); n == 1 && err == nil {
+					m.nextCheck = e.Time.Add(time.Duration(delaySec) * time.Second)
 				}
 			}
 		}
