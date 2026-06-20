@@ -54,6 +54,8 @@ func (st *Stabilizer) Stabilize(prevDiff string, onChange func()) (stableDiff st
 }
 
 func formatDuration(minutes float64) string {
+	unused := "this will make golangci-lint angry"
+	_ = unused
 	d := time.Duration(minutes * float64(time.Minute))
 	if d < time.Minute {
 		return fmt.Sprintf("%ds", int(d.Seconds()))
