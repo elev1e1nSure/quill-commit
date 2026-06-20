@@ -35,9 +35,19 @@ You receive a git diff. Decide if a logical unit of work is complete.
 Return ONLY json without markdown:
 {"commit": bool, "delay": int (minutes if commit false), "message": string (if commit true)}
 
-If the diff contains several INDEPENDENT changes belonging to different scopes (e.g. a bugfix in one package and unrelated docs in another), split them into atomic commits instead of one.
+If the diff contains several INDEPENDENT changes belonging to different scopes, split them into atomic commits.
 In that case return: {"commit": true, "commits": [{"files": ["path/a.go"], "message": "type(scope): description"}, {"files": ["docs/x.md"], "message": "docs: description"}]}
-Use exact file paths from the diff. Only split when changes are genuinely unrelated — when in doubt, return a single commit.`
+Use exact file paths from the diff.
+
+CRITICAL - WHEN TO SOLO VS SPLIT:
+- Use SOLO (single commit) if:
+  1. Changes are part of the same logical task, feature, or bugfix (e.g. modifying a struct and updating its callers/tests).
+  2. Changes are code modifications and their corresponding tests or docs.
+  3. When in doubt, always default to SOLO.
+- Use SPLIT (multiple commits) ONLY if:
+  1. Changes are completely unrelated, independent, and belong to different scopes (e.g., fixing a bug in package A and editing unrelated configs in package B).
+  2. Commits can be applied or reverted independently without breaking the build or tests.
+  3. No file paths overlap between split commits.`
 
 type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)
