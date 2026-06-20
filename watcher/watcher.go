@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,6 +124,9 @@ type Watcher struct {
 
 	ctx           context.Context
 	cancel        context.CancelFunc
+
+	logFile       *os.File
+	logger        *slog.Logger
 }
 
 func New(ctx context.Context, cfg config.Config, apiKey string, repoRoot string) *Watcher {
@@ -169,6 +173,23 @@ func New(ctx context.Context, cfg config.Config, apiKey string, repoRoot string)
 
 	ctx, cancel := context.WithCancel(ctx)
 
+	var logFile *os.File
+	var logger *slog.Logger
+	isTest := flag.Lookup("test.v") != nil
+
+	if repoRoot != "" && !isTest {
+		logPath := filepath.Join(repoRoot, "log.txt")
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "warn: could not open log file:", err)
+		} else {
+			logFile = f
+			logger = slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{
+				Level: slog.LevelDebug,
+			}))
+		}
+	}
+
 	w := &Watcher{
 		cfg:           cfg,
 		apiKey:        apiKey,
@@ -184,9 +205,11 @@ func New(ctx context.Context, cfg config.Config, apiKey string, repoRoot string)
 		repoRoot:      repoRoot,
 		ctx:           ctx,
 		cancel:        cancel,
+		logFile:       logFile,
+		logger:        logger,
 	}
 	w.sleepFn = w.sleep
-	if flag.Lookup("test.v") != nil {
+	if isTest {
 		w.sleepFn = func(d time.Duration) {}
 	}
 	return w
@@ -194,6 +217,9 @@ func New(ctx context.Context, cfg config.Config, apiKey string, repoRoot string)
 
 func (w *Watcher) Close() {
 	w.cancel()
+	if w.logFile != nil {
+		w.logFile.Close()
+	}
 }
 
 func (w *Watcher) sleep(d time.Duration) {
@@ -526,13 +552,19 @@ func (w *Watcher) emit(kind EventKind, msg string) {
 		name = fmt.Sprintf("UnknownEvent(%d)", kind)
 	}
 
-	if w.repoRoot != "" {
-		logPath := filepath.Join(w.repoRoot, "log.txt")
-		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-		if err == nil {
-			fmt.Fprintf(f, "%s [%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), name, msg)
-			f.Close()
+	if w.logger != nil {
+		var level slog.Level
+		switch kind {
+		case EventError:
+			level = slog.LevelError
+		case EventForced:
+			level = slog.LevelWarn
+		case EventCheck, EventSkip:
+			level = slog.LevelDebug
+		default:
+			level = slog.LevelInfo
 		}
+		w.logger.Log(w.ctx, level, msg, slog.String("event", name))
 	}
 
 	select {
