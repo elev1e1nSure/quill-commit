@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,7 +11,7 @@ import (
 
 	"quill-commit/ai"
 	"quill-commit/config"
-	"quill-commit/context"
+	gitcontext "quill-commit/context"
 )
 
 // --- fakes ---
@@ -71,7 +72,7 @@ func (f *fakeAI) Ask(req ai.Request) (ai.Decision, ai.Usage, error) {
 
 func newTestWatcher(g *fakeGit, a *fakeAI) *Watcher {
 	cfg := config.Config{Interval: 10, Stabilize: 0, MaxDelays: 3, Model: "test"}
-	w := New(cfg, "key", "")
+	w := New(context.Background(), cfg, "key", "")
 	w.git = g
 	w.ai = a
 	w.sleepFn = func(d time.Duration) {} // mock sleep to be instantaneous
@@ -261,7 +262,7 @@ func TestWatcherSessionID(t *testing.T) {
 	}
 	g := &fakeGit{diffs: []string{"diff-x"}}
 
-	w := New(cfg, "key", t.TempDir())
+	w := New(context.Background(), cfg, "key", t.TempDir())
 	w.git = g
 	w.ai = a
 	w.prevDiff = "diff-x"
@@ -291,11 +292,9 @@ func TestWatcher_IncludeContext_HappyPath(t *testing.T) {
 	defer func() { ai.CacheCapabilityFn = oldCap }()
 
 	// Stub out LsFilesFunc to avoid git execution in BuildStatic
-	oldLs := context.LsFilesFunc
-	context.LsFilesFunc = func() (string, error) {
+	defer gitcontext.SetLsFilesFuncForTest(func() (string, error) {
 		return "pkg/pkg.go\n", nil
-	}
-	defer func() { context.LsFilesFunc = oldLs }()
+	})()
 
 	// Create temp dir and mock CLAUDE.md
 	tmpDir := t.TempDir()
@@ -313,7 +312,7 @@ func TestWatcher_IncludeContext_HappyPath(t *testing.T) {
 	}
 	g := &fakeGit{diffs: []string{"diff-x"}}
 
-	w := New(cfg, "key", tmpDir)
+	w := New(context.Background(), cfg, "key", tmpDir)
 	w.git = g
 	w.ai = a
 	w.prevDiff = "diff-x"
@@ -348,9 +347,7 @@ func TestWatcher_CacheMissesState(t *testing.T) {
 	ai.CacheCapabilityFn = func(model, apiKey string) (bool, error) { return true, nil }
 	defer func() { ai.CacheCapabilityFn = oldCap }()
 
-	oldLs := context.LsFilesFunc
-	context.LsFilesFunc = func() (string, error) { return "", nil }
-	defer func() { context.LsFilesFunc = oldLs }()
+	defer gitcontext.SetLsFilesFuncForTest(func() (string, error) { return "", nil })()
 
 	tmpDir := t.TempDir()
 	shortProject := strings.Repeat("A", 100)
@@ -377,7 +374,7 @@ func TestWatcher_CacheMissesState(t *testing.T) {
 	}
 	g := &fakeGit{diffs: []string{"diff-x"}}
 
-	w := New(cfg, "key", tmpDir)
+	w := New(context.Background(), cfg, "key", tmpDir)
 	w.git = g
 	w.ai = a
 	w.prevDiff = "diff-x"
@@ -421,7 +418,7 @@ func TestWatcher_IncludeContext_False(t *testing.T) {
 	}
 	g := &fakeGit{diffs: []string{"diff-x"}}
 
-	w := New(cfg, "key", "")
+	w := New(context.Background(), cfg, "key", "")
 	w.git = g
 	w.ai = a
 	w.prevDiff = "diff-x"
@@ -452,23 +449,15 @@ func TestWatcher_BuildDynamic_Fail(t *testing.T) {
 	ai.CacheCapabilityFn = func(model, apiKey string) (bool, error) { return true, nil }
 	defer func() { ai.CacheCapabilityFn = oldCap }()
 
-	oldLs := context.LsFilesFunc
-	context.LsFilesFunc = func() (string, error) { return "", nil }
-	defer func() { context.LsFilesFunc = oldLs }()
+	defer gitcontext.SetLsFilesFuncForTest(func() (string, error) { return "", nil })()
 
 	// Inject failing BuildDynamic helpers
-	oldRecent := context.RecentCommitsFunc
-	oldStatus := context.StatusShortFunc
-	context.RecentCommitsFunc = func(n int) (string, error) {
+	defer gitcontext.SetRecentCommitsFuncForTest(func(n int) (string, error) {
 		return "", errors.New("recent commits error")
-	}
-	context.StatusShortFunc = func() (string, error) {
+	})()
+	defer gitcontext.SetStatusShortFuncForTest(func() (string, error) {
 		return "", errors.New("status short error")
-	}
-	defer func() {
-		context.RecentCommitsFunc = oldRecent
-		context.StatusShortFunc = oldStatus
-	}()
+	})()
 
 	var called bool
 	a := &fakeAI{
@@ -480,7 +469,7 @@ func TestWatcher_BuildDynamic_Fail(t *testing.T) {
 	}
 	g := &fakeGit{diffs: []string{"diff-x"}}
 
-	w := New(cfg, "key", t.TempDir())
+	w := New(context.Background(), cfg, "key", t.TempDir())
 	w.git = g
 	w.ai = a
 	w.prevDiff = "diff-x"
@@ -506,11 +495,9 @@ func TestWatcher_BuildStatic_Fail(t *testing.T) {
 	defer func() { ai.CacheCapabilityFn = oldCap }()
 
 	// Inject failing BuildStatic helper
-	oldLs := context.LsFilesFunc
-	context.LsFilesFunc = func() (string, error) {
+	defer gitcontext.SetLsFilesFuncForTest(func() (string, error) {
 		return "", errors.New("ls-files error")
-	}
-	defer func() { context.LsFilesFunc = oldLs }()
+	})()
 
 	// watcher.New should not panic even if BuildStatic fails
 	defer func() {
@@ -519,7 +506,7 @@ func TestWatcher_BuildStatic_Fail(t *testing.T) {
 		}
 	}()
 
-	w := New(cfg, "key", t.TempDir())
+	w := New(context.Background(), cfg, "key", t.TempDir())
 	if w.static.Project != "" || len(w.static.Packages) != 0 {
 		t.Error("expected empty Static context on failure")
 	}

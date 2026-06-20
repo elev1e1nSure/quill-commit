@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"flag"
@@ -13,7 +14,7 @@ import (
 
 	"quill-commit/ai"
 	"quill-commit/config"
-	"quill-commit/context"
+	gitcontext "quill-commit/context"
 	"quill-commit/git"
 )
 
@@ -110,7 +111,7 @@ type Watcher struct {
 	delayCounter int
 
 	// Context fields
-	static        context.Static
+	static        gitcontext.Static
 	staticBudget  int
 	fullBudget    int
 	sessionID     string
@@ -119,17 +120,20 @@ type Watcher struct {
 
 	sleepFn       func(time.Duration)
 	repoRoot      string
+
+	ctx           context.Context
+	cancel        context.CancelFunc
 }
 
-func New(cfg config.Config, apiKey string, repoRoot string) *Watcher {
-	var static context.Static
+func New(ctx context.Context, cfg config.Config, apiKey string, repoRoot string) *Watcher {
+	var static gitcontext.Static
 	var sessionID string
 	var explicitCache bool
 	var staticBudget, fullBudget int
 
 	if cfg.IncludeContext {
 		var err error
-		static, err = context.BuildStatic(repoRoot)
+		static, err = gitcontext.BuildStatic(repoRoot)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "warn: context.BuildStatic:", err)
 		}
@@ -163,11 +167,13 @@ func New(cfg config.Config, apiKey string, repoRoot string) *Watcher {
 		fullBudget = cfg.ContextBudget
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+
 	w := &Watcher{
 		cfg:           cfg,
 		apiKey:        apiKey,
 		Events:        make(chan Event, 64),
-		Cmds:          make(chan Cmd, 8),
+		Cmds:          make(chan Cmd, 32),
 		git:           realGit{},
 		ai:            realAI{},
 		static:        static,
@@ -176,6 +182,8 @@ func New(cfg config.Config, apiKey string, repoRoot string) *Watcher {
 		sessionID:     sessionID,
 		explicitCache: explicitCache,
 		repoRoot:      repoRoot,
+		ctx:           ctx,
+		cancel:        cancel,
 	}
 	w.sleepFn = w.sleep
 	if flag.Lookup("test.v") != nil {
@@ -184,10 +192,15 @@ func New(cfg config.Config, apiKey string, repoRoot string) *Watcher {
 	return w
 }
 
+func (w *Watcher) Close() {
+	w.cancel()
+}
+
 func (w *Watcher) sleep(d time.Duration) {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
 	select {
+	case <-w.ctx.Done():
 	case <-timer.C:
 	case cmd := <-w.Cmds:
 		w.handleCmd(cmd)
@@ -204,6 +217,8 @@ func (w *Watcher) Run() {
 
 	for {
 		select {
+		case <-w.ctx.Done():
+			return
 		case <-ticker.C:
 			if !w.paused.Load() {
 				w.tick()
@@ -331,12 +346,12 @@ func (w *Watcher) delayLoop(stableDiff string) {
 		var userPrompt string
 
 		if w.cfg.IncludeContext {
-			dyn, dynErr := context.BuildDynamic(w.cfg.RecentCommitsCount)
+			dyn, dynErr := gitcontext.BuildDynamic(w.cfg.RecentCommitsCount)
 			if dynErr != nil {
 				w.emit(EventInfo, fmt.Sprintf("warn: context.BuildDynamic: %s", dynErr))
 			}
-			sysPrompt = ai.BasePrompt + "\n\n---\n\n" + context.RenderSystem(w.static, w.staticBudget)
-			userPrompt = context.RenderUser(dyn, stableDiff)
+			sysPrompt = ai.BasePrompt + "\n\n---\n\n" + gitcontext.RenderSystem(w.static, w.staticBudget)
+			userPrompt = gitcontext.RenderUser(dyn, stableDiff)
 		} else {
 			sysPrompt = ai.BasePrompt
 			userPrompt = stableDiff
@@ -478,6 +493,8 @@ func (w *Watcher) doCommit(message string) {
 	diff, err := w.git.Diff()
 	if err != nil {
 		w.emit(EventError, fmt.Sprintf("git diff before commit: %s", err))
+		w.prevDiff = ""
+		w.delayCounter = 0
 		return
 	}
 	if diff == "" {
@@ -488,6 +505,8 @@ func (w *Watcher) doCommit(message string) {
 	}
 	if err := w.git.Add(); err != nil {
 		w.emit(EventError, fmt.Sprintf("git add: %s", err))
+		w.prevDiff = ""
+		w.delayCounter = 0
 		return
 	}
 	if err := w.git.Commit(message); err != nil {

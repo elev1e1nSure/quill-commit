@@ -34,19 +34,39 @@ const Conventions = `Commit message rules:
 - Entire message must be under 100 characters
 - Example: fix(ai): trim whitespace from model response`
 
-// Exported variables for testing injection
 var (
-	LsFilesFunc       = git.LsFiles
-	RecentCommitsFunc = git.RecentCommits
-	StatusShortFunc   = git.StatusShort
+	lsFilesFunc       = git.LsFiles
+	recentCommitsFunc = git.RecentCommits
+	statusShortFunc   = git.StatusShort
 )
+
+// SetLsFilesFuncForTest overrides the git.LsFiles function for testing and returns a restore function.
+func SetLsFilesFuncForTest(f func() (string, error)) func() {
+	old := lsFilesFunc
+	lsFilesFunc = f
+	return func() { lsFilesFunc = old }
+}
+
+// SetRecentCommitsFuncForTest overrides the git.RecentCommits function for testing and returns a restore function.
+func SetRecentCommitsFuncForTest(f func(int) (string, error)) func() {
+	old := recentCommitsFunc
+	recentCommitsFunc = f
+	return func() { recentCommitsFunc = old }
+}
+
+// SetStatusShortFuncForTest overrides the git.StatusShort function for testing and returns a restore function.
+func SetStatusShortFuncForTest(f func() (string, error)) func() {
+	old := statusShortFunc
+	statusShortFunc = f
+	return func() { statusShortFunc = old }
+}
 
 func BuildStatic(repoRoot string) (Static, error) {
 	var s Static
 	s.Conventions = Conventions
 
-	// 1. Packages from LsFilesFunc
-	filesStr, err := LsFilesFunc()
+	// 1. Packages from lsFilesFunc
+	filesStr, err := lsFilesFunc()
 	if err != nil {
 		return s, fmt.Errorf("git ls-files: %w", err)
 	}
@@ -132,14 +152,14 @@ func BuildDynamic(commitsN int) (Dynamic, error) {
 	var d Dynamic
 	var errs []error
 
-	commits, err := RecentCommitsFunc(commitsN)
+	commits, err := recentCommitsFunc(commitsN)
 	if err != nil {
 		errs = append(errs, err)
 	} else {
 		d.RecentCommits = commits
 	}
 
-	status, err := StatusShortFunc()
+	status, err := statusShortFunc()
 	if err != nil {
 		errs = append(errs, err)
 	} else {

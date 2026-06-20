@@ -21,6 +21,9 @@ const (
 var client = &http.Client{Timeout: dialTimeout + readTimeout}
 
 func Generate(ctx context.Context, fromRef, toRef, apiKey, model string, initial bool) (string, error) {
+	if fromRef == toRef {
+		return "", fmt.Errorf("from and to revisions are identical: %s", fromRef)
+	}
 	commits, err := getCommits(ctx, fromRef, toRef)
 	if err != nil {
 		return "", fmt.Errorf("get commits: %w", err)

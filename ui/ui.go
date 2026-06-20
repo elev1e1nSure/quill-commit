@@ -118,6 +118,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitPending = true
 			return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg { return quitResetMsg{} })
 		case "p":
+			if m.sending || m.amending {
+				break
+			}
 			if m.paused {
 				m.paused = false
 				m.sendCmd(watcher.Cmd{Kind: watcher.CmdResume})
@@ -126,6 +129,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.sendCmd(watcher.Cmd{Kind: watcher.CmdPause})
 			}
 		case "a":
+			if m.sending || m.amending {
+				break
+			}
 			if !m.amending {
 				m.amending = true
 				m.sendCmd(watcher.Cmd{Kind: watcher.CmdAmend})

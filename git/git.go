@@ -46,6 +46,23 @@ func quotePath(p string) string {
 	return p
 }
 
+func isKnownBinaryExtension(path string) bool {
+	exts := []string{
+		".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".pdf",
+		".zip", ".gz", ".tar", ".tgz", ".bz2", ".xz", ".7z",
+		".exe", ".dll", ".so", ".dylib", ".a", ".o", ".pyc",
+		".db", ".sqlite", ".class", ".jar", ".war", ".ear",
+		".woff", ".woff2", ".eot", ".ttf", ".mp3", ".mp4", ".wav",
+	}
+	p := strings.ToLower(path)
+	for _, ext := range exts {
+		if strings.HasSuffix(p, ext) {
+			return true
+		}
+	}
+	return false
+}
+
 func Diff() (string, error) {
 	s, err := runGit("diff", "HEAD", "--", ".", ":(exclude)log.txt")
 	if err != nil {
@@ -59,6 +76,9 @@ func Diff() (string, error) {
 	files := strings.Fields(untracked)
 	for _, f := range files {
 		if f == "log.txt" || strings.HasSuffix(f, "/log.txt") || strings.HasSuffix(f, "\\log.txt") {
+			continue
+		}
+		if isKnownBinaryExtension(f) {
 			continue
 		}
 		info, err := os.Stat(f)

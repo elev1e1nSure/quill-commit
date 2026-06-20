@@ -8,11 +8,11 @@ import (
 )
 
 func TestBuildStatic(t *testing.T) {
-	// Mock LsFilesFunc
-	oldLs := LsFilesFunc
-	defer func() { LsFilesFunc = oldLs }()
+	// Mock lsFilesFunc
+	oldLs := lsFilesFunc
+	defer func() { lsFilesFunc = oldLs }()
 
-	LsFilesFunc = func() (string, error) {
+	lsFilesFunc = func() (string, error) {
 		return "ai/ai.go\nconfig/config.go\ngit/git.go\nmain.go\n", nil
 	}
 
@@ -54,9 +54,9 @@ Some other content.`
 }
 
 func TestBuildStaticFallbackAndMissing(t *testing.T) {
-	oldLs := LsFilesFunc
-	defer func() { LsFilesFunc = oldLs }()
-	LsFilesFunc = func() (string, error) { return "", nil }
+	oldLs := lsFilesFunc
+	defer func() { lsFilesFunc = oldLs }()
+	lsFilesFunc = func() (string, error) { return "", nil }
 
 	tmpDir := t.TempDir()
 
@@ -91,18 +91,18 @@ README Stack.`
 }
 
 func TestBuildDynamic(t *testing.T) {
-	oldRecent := RecentCommitsFunc
-	oldStatus := StatusShortFunc
+	oldRecent := recentCommitsFunc
+	oldStatus := statusShortFunc
 	defer func() {
-		RecentCommitsFunc = oldRecent
-		StatusShortFunc = oldStatus
+		recentCommitsFunc = oldRecent
+		statusShortFunc = oldStatus
 	}()
 
 	// Happy path
-	RecentCommitsFunc = func(n int) (string, error) {
+	recentCommitsFunc = func(n int) (string, error) {
 		return "commit1\ncommit2", nil
 	}
-	StatusShortFunc = func() (string, error) {
+	statusShortFunc = func() (string, error) {
 		return "M ai/ai.go", nil
 	}
 
@@ -118,10 +118,10 @@ func TestBuildDynamic(t *testing.T) {
 	}
 
 	// Failure path (partial results + errors)
-	RecentCommitsFunc = func(n int) (string, error) {
+	recentCommitsFunc = func(n int) (string, error) {
 		return "", errors.New("recent commits error")
 	}
-	StatusShortFunc = func() (string, error) {
+	statusShortFunc = func() (string, error) {
 		return "M config/config.go", nil
 	}
 

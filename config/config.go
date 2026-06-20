@@ -26,14 +26,14 @@ type Preset struct {
 	Desc      string
 }
 
-var Presets = map[string]Preset{
+var presets = map[string]Preset{
 	"active":     {Interval: 2, Stabilize: 1, MaxDelays: 3, Desc: "check every 2m, re-check every 1m — active coding sessions"},
 	"deep":       {Interval: 5, Stabilize: 2.5, MaxDelays: 2, Desc: "check every 5m, re-check every 2.5m — long focused work"},
 	"aggressive": {Interval: 0.5, Stabilize: 0.25, MaxDelays: 4, Desc: "check every 30s, re-check every 15s — frequent commits"},
 }
 
 func ApplyPreset(cfg *Config, name string) bool {
-	p, ok := Presets[name]
+	p, ok := presets[name]
 	if !ok {
 		return false
 	}

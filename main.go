@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -139,7 +140,11 @@ func main() {
 		}
 	}
 
-	w := watcher.New(cfg, apiKey, repoRoot)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	w := watcher.New(ctx, cfg, apiKey, repoRoot)
+	defer w.Close()
 	go w.Run()
 
 	p := tea.NewProgram(ui.New(cfg, w.Events, w.Cmds), tea.WithAltScreen())
