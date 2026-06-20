@@ -1,9 +1,0 @@
-interval = 0.1
-stabilize = 0.08
-max_delays = 5
-model = 'deepseek/deepseek-v4-flash'
-strategy = 'standard'
-include_context = true
-context_budget = 30000
-recent_commits = 10
-session_id = ''
