@@ -13,7 +13,7 @@
 
 ---
 
-> **⚠️ This tool automatically commits to your repo.** It runs `git add -A` and `git commit` without manual review. Changes are written to your local git history automatically. You are responsible for every commit. Use with caution on shared or protected branches.
+> **⚠️ This tool automatically commits to your repo.** It stages only the changes it sees through its filters and commits them without manual review. Changes are written to your local git history automatically. You are responsible for every commit. Use with caution on shared or protected branches.
 
 ## What it does
 
@@ -22,6 +22,18 @@ You write code. quill-commit watches `git diff`, waits for the pace to slow down
 If a commit is blocked by a pre-commit hook, quill-commit detects the unchanged diff and stays silent until you change something. It also asks the model to explain the failure and shows the suggestion in the TUI.
 
 No heuristics. No line-count thresholds. Just the model looking at your actual diff.
+
+## Security & secret filtering
+
+quill-commit has three independent layers to prevent secrets from ever reaching the LLM or being committed:
+
+1. **Path filter** — hardcoded exclusions for known secret files: `.env`, `.env.*`, `*.pem`, `*.key`, `*_rsa`, `*.p12`, `credentials*`, `secrets*`. You can add your own patterns in a `.quillignore` file (same syntax as `.gitignore`).
+2. **Content scan** — scans added lines and untracked files for known secret signatures (OpenAI `sk-or-v1-`, AWS `AKIA`, GitHub `ghp_`/`ghs_`, Slack `xox...`, Google `AIza`). If a match is found, the file is excluded entirely.
+3. **Add filter** — instead of `git add -A`, quill-commit stages only the specific files that passed both filters above. Even if a file slips through the diff layer, it will never be staged.
+
+If your working directory contains **only** secret files (e.g. an old `.env` you haven't removed), quill-commit goes into *quarantine*: it silently skips (with one log message) and does not call the model. It automatically resumes as soon as normal code changes appear.
+
+See `.quillignore.example` for a template.
 
 ## Install
 

@@ -1,0 +1,25 @@
+# Example .quillignore
+# Same syntax as .gitignore. Patterns are matched against file paths.
+# Uncomment lines you need, or add your own.
+
+# Logs (already excluded from diff by size, but you can also path-filter them)
+# *.log
+
+# Temporary / build directories
+# temp/
+# build/
+# dist/
+
+# IDE / editor files
+# .idea/
+# .vscode/
+# *.swp
+
+# OS files
+# .DS_Store
+# Thumbs.db
+
+# Notes and drafts you don't want sent to the AI
+# plan.md
+# draft.md
+# todo.txt

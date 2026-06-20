@@ -9,13 +9,14 @@ quill-commit — a Go TUI tool that watches a git repo and auto-commits changes 
 - **Language:** Go 1.24.2
 - **TUI:** `github.com/charmbracelet/bubbletea` + `github.com/charmbracelet/lipgloss` + `github.com/charmbracelet/bubbles`
 - **Config:** `github.com/pelletier/go-toml/v2`
+- **Glob matching:** `github.com/bmatcuk/doublestar/v4` (for `.quillignore` path filtering)
 - **Lint:** `golangci-lint` (errcheck, govet, staticcheck)
 - **Commits:** `commitlint` + `husky` (conventional commits)
 
 ## Code style
 
 - Standard Go conventions: `gofmt`, `go vet`, `golangci-lint` clean.
-- Package layout: `credentials/`, `config/`, `git/`, `context/`, `ai/`, `watcher/`, `ui/`, `releasenotes/`, `cmd/releasenotes/`.
+- Package layout: `credentials/`, `config/`, `pathfilter/`, `secretscan/`, `git/`, `context/`, `ai/`, `watcher/`, `ui/`, `releasenotes/`, `cmd/releasenotes/`.
 - Main package split: `main.go` (entrypoint, usage), `main_cli.go` (CLI struct), `main_credentials.go` (credential resolver), `main_config.go` (config resolver), `main_app.go` (App struct).
 - Zero external logging libraries — standard library `log/slog` for structured logging to `log.txt`, and `fmt.Fprint` to bubbletea model or stderr.
 - Errors are values, never panic.

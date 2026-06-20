@@ -52,6 +52,152 @@ func newTempRepo(t *testing.T) (string, func()) {
 	}
 }
 
+func TestDiffExNameOnlyFilter(t *testing.T) {
+	dir, cleanup := newTempRepo(t)
+	defer cleanup()
+
+	// Create a secret file and a normal file.
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("SECRET=123\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0644)
+	exec.Command("git", "add", ".").Run()
+	exec.Command("git", "commit", "-m", "initial").Run()
+
+	// Modify both.
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("SECRET=456\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644)
+
+	res, err := DiffEx(dir)
+	if err != nil {
+		t.Fatalf("DiffEx: %v", err)
+	}
+
+	// .env should be excluded.
+	foundEnv := false
+	for _, f := range res.ExcludedFiles {
+		if f == ".env" {
+			foundEnv = true
+			break
+		}
+	}
+	if !foundEnv {
+		t.Errorf("expected .env in ExcludedFiles, got %v", res.ExcludedFiles)
+	}
+
+	// main.go should be included.
+	foundMain := false
+	for _, f := range res.IncludedFiles {
+		if f == "main.go" {
+			foundMain = true
+			break
+		}
+	}
+	if !foundMain {
+		t.Errorf("expected main.go in IncludedFiles, got %v", res.IncludedFiles)
+	}
+
+	// .env should not appear in the diff string.
+	if strings.Contains(res.Diff, ".env") {
+		t.Error("expected diff to not contain .env")
+	}
+}
+
+func TestDiffExTrackedSecretExcluded(t *testing.T) {
+	dir, cleanup := newTempRepo(t)
+	defer cleanup()
+
+	os.WriteFile(filepath.Join(dir, "config.go"), []byte("package main\n"), 0644)
+	exec.Command("git", "add", ".").Run()
+	exec.Command("git", "commit", "-m", "initial").Run()
+
+	// Add a secret line to a tracked file.
+	os.WriteFile(filepath.Join(dir, "config.go"), []byte("package main\n\n// key: sk-or-v1-abc123def456ghi789jkl012mno345pqr678stu\n"), 0644)
+
+	res, err := DiffEx(dir)
+	if err != nil {
+		t.Fatalf("DiffEx: %v", err)
+	}
+
+	// config.go should be excluded because its added line contains a secret.
+	found := false
+	for _, f := range res.ExcludedFiles {
+		if f == "config.go" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected config.go in ExcludedFiles, got %v", res.ExcludedFiles)
+	}
+
+	// config.go should not be in IncludedFiles.
+	for _, f := range res.IncludedFiles {
+		if f == "config.go" {
+			t.Errorf("expected config.go to NOT be in IncludedFiles")
+		}
+	}
+
+	// The secret should not appear in the diff string.
+	if strings.Contains(res.Diff, "sk-or-v1-") {
+		t.Error("expected diff to not contain the secret token")
+	}
+}
+
+func TestDiffExUntrackedSecret(t *testing.T) {
+	dir, cleanup := newTempRepo(t)
+	defer cleanup()
+
+	// Make an initial commit so HEAD exists.
+	os.WriteFile(filepath.Join(dir, "a.go"), []byte("package main\n"), 0644)
+	exec.Command("git", "add", ".").Run()
+	exec.Command("git", "commit", "-m", "initial").Run()
+
+	// Create an untracked file with a secret.
+	os.WriteFile(filepath.Join(dir, "tokens.txt"), []byte("api_key=sk-or-v1-abc123def456ghi789jkl012mno345pqr678stu\n"), 0644)
+
+	res, err := DiffEx(dir)
+	if err != nil {
+		t.Fatalf("DiffEx: %v", err)
+	}
+
+	found := false
+	for _, f := range res.ExcludedFiles {
+		if f == "tokens.txt" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected tokens.txt in ExcludedFiles, got %v", res.ExcludedFiles)
+	}
+
+	// The secret should not appear in the diff string.
+	if strings.Contains(res.Diff, "sk-or-v1-") {
+		t.Error("expected diff to not contain the secret token")
+	}
+}
+
+func TestDiffExBackwardCompatible(t *testing.T) {
+	dir, cleanup := newTempRepo(t)
+	defer cleanup()
+
+	os.WriteFile(filepath.Join(dir, "a.go"), []byte("package main\n"), 0644)
+	exec.Command("git", "add", ".").Run()
+	exec.Command("git", "commit", "-m", "initial").Run()
+	os.WriteFile(filepath.Join(dir, "a.go"), []byte("package main\n\nfunc main() {}\n"), 0644)
+
+	oldDiff, err := Diff()
+	if err != nil {
+		t.Fatalf("Diff: %v", err)
+	}
+	res, err := DiffEx(dir)
+	if err != nil {
+		t.Fatalf("DiffEx: %v", err)
+	}
+	if oldDiff != res.Diff {
+		t.Errorf("Diff() and DiffEx().Diff differ:\nDiff(): %q\nDiffEx(): %q", oldDiff, res.Diff)
+	}
+}
+
 func TestRecentCommitsNZero(t *testing.T) {
 	_, cleanup := newTempRepo(t)
 	defer cleanup()

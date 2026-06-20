@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"quill-commit/ai"
@@ -68,6 +70,7 @@ type Event struct {
 
 type gitOps interface {
 	Diff() (string, error)
+	DiffEx(repoRoot string) (git.DiffResult, error)
 	Add() error
 	AddPaths(paths []string) error
 	Commit(message string) error
@@ -79,14 +82,15 @@ type aiOps interface {
 	Ask(req ai.Request) (ai.Decision, ai.Usage, error)
 }
 
-type realGit struct{}
+type realGit struct{ repoRoot string }
 
-func (realGit) Diff() (string, error)           { return git.Diff() }
-func (realGit) Add() error                       { return git.Add() }
-func (realGit) AddPaths(paths []string) error    { return git.AddPaths(paths) }
-func (realGit) Commit(message string) error      { return git.Commit(message) }
-func (realGit) HeadMessage() (string, error)     { return git.HeadMessage() }
-func (realGit) AmendCommit(message string) error { return git.AmendCommit(message) }
+func (rg realGit) Diff() (string, error)                     { return git.Diff() }
+func (rg realGit) DiffEx(repoRoot string) (git.DiffResult, error) { return git.DiffEx(repoRoot) }
+func (rg realGit) Add() error                               { return git.Add() }
+func (rg realGit) AddPaths(paths []string) error            { return git.AddPaths(paths) }
+func (rg realGit) Commit(message string) error              { return git.Commit(message) }
+func (rg realGit) HeadMessage() (string, error)              { return git.HeadMessage() }
+func (rg realGit) AmendCommit(message string) error         { return git.AmendCommit(message) }
 
 type realAI struct{}
 
@@ -114,6 +118,12 @@ type Watcher struct {
 	// a commit (e.g. pre-commit hook). A diff whose hash is in this set is skipped
 	// even if the diff briefly changed and came back. Cleared on successful commit.
 	blockedDiffHashes map[string]struct{}
+
+	// quarantine prevents infinite loops when the working directory only contains
+	// secret files that are filtered out. We remember the excluded fingerprint
+	// and silently skip until normal files appear.
+	quarantineFingerprint string
+	repoRoot              string
 
 	sleepFn func(time.Duration)
 
@@ -158,21 +168,22 @@ func New(ctx context.Context, cfg config.Config, apiKey string, repoRoot string)
 	}
 
 	w := &Watcher{
-		cfg:     cfg,
-		apiKey:  apiKey,
-		Events:  events,
-		Cmds:    cmds,
-		git:     realGit{},
-		ai:      realAI{},
-		sleepFn: sleepFn,
-		ctx:     ctx,
-		cancel:  cancel,
-		logFile: logFile,
+		cfg:      cfg,
+		apiKey:   apiKey,
+		Events:   events,
+		Cmds:     cmds,
+		git:      realGit{repoRoot: repoRoot},
+		ai:       realAI{},
+		sleepFn:  sleepFn,
+		ctx:      ctx,
+		cancel:   cancel,
+		logFile:  logFile,
+		repoRoot: repoRoot,
 	}
 
 	w.eventLogger = newEventLogger(ctx, events, logger)
-	w.stabilizer = newStabilizer(cfg, w.git, w.sleepFn)
-	w.commitEng = newCommitEngine(w.git, w.emit, w.emitDetail)
+	w.stabilizer = newStabilizer(cfg, w.git, repoRoot, w.sleepFn)
+	w.commitEng = newCommitEngine(w.git, repoRoot, w.emit, w.emitDetail)
 	w.ctxMgr = newContextManager(ctx, cfg, apiKey, repoRoot)
 
 	// Scheduler ticks into w.tick and forwards other commands (e.g. Amend) back.
@@ -221,7 +232,7 @@ func (w *Watcher) handleCmd(cmd Cmd) {
 }
 
 func (w *Watcher) doAmend() {
-	diff, err := w.git.Diff()
+	res, err := w.git.DiffEx(w.repoRoot)
 	if err != nil {
 		w.emit(EventError, fmt.Sprintf("amend: git diff: %s", err))
 		return
@@ -233,7 +244,7 @@ func (w *Watcher) doAmend() {
 		return
 	}
 
-	if diff == "" && original == "" {
+	if res.Diff == "" && original == "" {
 		w.emit(EventInfo, "amend: nothing to amend")
 		return
 	}
@@ -244,12 +255,12 @@ func (w *Watcher) doAmend() {
 		hasDiff      bool
 	)
 
-	if diff == "" {
+	if res.Diff == "" {
 		systemPrompt = ai.AmendRewritePrompt
 		userPrompt = "Original commit message:\n" + original
 	} else {
 		systemPrompt = ai.AmendBasePrompt
-		userPrompt = "Original commit message:\n" + original + "\n\nAdditional diff:\n" + diff
+		userPrompt = "Original commit message:\n" + original + "\n\nAdditional diff:\n" + res.Diff
 		hasDiff = true
 	}
 
@@ -276,7 +287,7 @@ func (w *Watcher) doAmend() {
 }
 
 func (w *Watcher) tick() {
-	diff, err := w.git.Diff()
+	res, err := w.git.DiffEx(w.repoRoot)
 	if err != nil {
 		w.emit(EventError, fmt.Sprintf("git diff: %s", err))
 		w.delayCounter = 0
@@ -284,6 +295,21 @@ func (w *Watcher) tick() {
 	}
 
 	w.emit(EventCheck, "checking diff")
+
+	// Quarantine: if there are only excluded files and no included files,
+	// we silently skip (with one log per new fingerprint) to avoid
+	// infinite loops and model spam.
+	if len(res.IncludedFiles) == 0 && len(res.ExcludedFiles) > 0 {
+		fp := excludedFingerprint(res.ExcludedFiles)
+		if fp != w.quarantineFingerprint {
+			w.quarantineFingerprint = fp
+			w.emit(EventInfo, fmt.Sprintf("quarantine: %d secret files blocked (fix or .quillignore)", len(res.ExcludedFiles)))
+		}
+		return
+	}
+	w.quarantineFingerprint = ""
+
+	diff := res.Diff
 
 	// If this diff's content has already failed a commit (e.g. pre-commit hook),
 	// skip silently even if the diff temporarily changed and came back.
@@ -375,12 +401,13 @@ func (w *Watcher) delayLoop(stableDiff string) {
 		w.emit(EventDelay, fmt.Sprintf("retry in %ds", delay))
 		w.sleepFn(time.Duration(delay) * time.Second)
 
-		currentDiff, err := w.git.Diff()
+		currentRes, err := w.git.DiffEx(w.repoRoot)
 		if err != nil {
 			w.emit(EventError, fmt.Sprintf("git diff after delay: %s", err))
 			w.delayCounter = 0
 			return
 		}
+		currentDiff := currentRes.Diff
 		if currentDiff != stableDiff {
 			w.emit(EventSkip, "diff changed during delay, resetting stabilization")
 			w.prevDiff = currentDiff
@@ -394,6 +421,7 @@ func (w *Watcher) resetAfterCommit() {
 	w.prevDiff = ""
 	w.delayCounter = 0
 	w.blockedDiffHashes = nil
+	w.quarantineFingerprint = ""
 }
 
 // blockDiff records the hash of a diff that failed a commit so future ticks
@@ -408,6 +436,23 @@ func (w *Watcher) blockDiff(diff string) {
 // diffHash returns a short hex fingerprint of a diff string.
 func diffHash(s string) string {
 	h := sha256.Sum256([]byte(s))
+	return fmt.Sprintf("%x", h[:8])
+}
+
+// excludedFingerprint returns a stable hash for a sorted list of excluded files.
+func excludedFingerprint(files []string) string {
+	if len(files) == 0 {
+		return ""
+	}
+	sorted := make([]string, len(files))
+	copy(sorted, files)
+	sort.Strings(sorted)
+	var b strings.Builder
+	for _, f := range sorted {
+		b.WriteString(f)
+		b.WriteByte(0)
+	}
+	h := sha256.Sum256([]byte(b.String()))
 	return fmt.Sprintf("%x", h[:8])
 }
 
