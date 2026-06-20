@@ -10,8 +10,8 @@ import (
 
 func TestBuildPrompt_includesEmoji(t *testing.T) {
 	p := buildPrompt()
-	if !strings.Contains(p, "✨") {
-		t.Fatal("prompt should contain emoji categories")
+	if !strings.Contains(p, "🔧") {
+		t.Fatal("prompt should reference emoji section headers")
 	}
 }
 
@@ -77,7 +77,7 @@ func TestGenerate_noRefs(t *testing.T) {
 
 func TestBuildInitialPrompt(t *testing.T) {
 	p := buildInitialPrompt()
-	if !strings.Contains(p, "initial release") {
-		t.Fatal("initial prompt should mention initial release")
+	if !strings.Contains(p, "first release") {
+		t.Fatal("initial prompt should mention first release")
 	}
 }

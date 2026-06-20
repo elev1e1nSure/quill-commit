@@ -53,48 +53,44 @@ func getCommits(ctx context.Context, fromRef, toRef string) ([]string, error) {
 }
 
 func buildPrompt() string {
-	return `You are a release notes editor. Given a list of commits for a release, write concise user-facing release notes in English.
+	return `You are a changelog editor. Convert raw commit messages into polished release notes that look hand-written.
 
-CRITICAL — DO NOT list every commit individually. Think at the feature level.
+Core principle: only include changes a user can notice, verify, or benefit from.
 
-RULES:
-- Merge related commits into a single bullet. If 10 commits built the TUI, that's one bullet: "Added TUI with status and log view"
-- Deduplicate: if the same feature appears in multiple commits, write it once
-- Drop: chore, ci, style, test, build — zero user value. Drop pure refactors unless they changed user behavior
-- Rewrite technical jargon into plain user language. "Added config presets" not "Added ability to persist --model, --interval, and --max-delays flags to config file"
-- 1-5 bullets per category max. If 50 commits went into "Features", distill to 2-5 bullets
-- Categories (sorted by importance): ✨ Features → 🐛 Fixes → ⚡ Performance → ♻️ Refactoring → 📝 Docs
-- Omit empty categories entirely
-- For an initial release (v1.0.0), describe what the software does at a high level, not how it was built
-- Return ONLY the markdown, no preamble
-
-FORMAT:
-## ✨ Features
-- High-level feature description
-
-## 🐛 Fixes
-- User-facing fix description
+Rules:
+- Keep the existing structure: ### section headers with emojis, then bullet list. You may rename section headers if they misrepresent the content.
+- Rename '🔧 Miscellaneous Tasks' to '🔧 Maintenance'.
+- Rewrite each commit into a clear user-facing description. Expand abbreviations, fix grammar, make it natural English.
+- Summary line at the top: one sentence for patches, two sentences max for minor releases. Never use grandiose language ("major overhaul", "complete redesign", etc.).
+- NEVER include any of these — they provide zero value to users:
+  * Version bumps ("bump version to…", "chore: bump")
+  * CI/CD config changes, workflow changes, release infrastructure
+  * .gitignore changes
+  * Agent/config files (CLAUDE.md, AGENTS.md, rules.md, etc.)
+  * Dependency updates without a visible fix
+  * Branch-only commits, merge commits, revert commits
+  * Internal refactors with no visible user effect (e.g. "replaced switch-case with handler map")
+  * Dead code removal, "cleanup model fields", "remove unused code"
+  * Changelog/infra tooling (git-cliff config, AI beautifier script, etc.)
+- Merge truly trivial adjacent commits into one bullet. Keep meaningful changes separate.
+- Refactor commits: include ONLY if there's a visible result. Instead of "refactored X" write "X is now more reliable/faster/clearer".
+- Do NOT invent features, fixes, or details not present in the commits.
+- Return ONLY the final markdown. No preamble, no code fences.
+- Never mention AI, LLM, machine generation, or the beautification process itself. The changelog must read as if written by a human.
 
 COMMITS:`
 }
 
 func buildInitialPrompt() string {
-	return `You are writing the initial release notes for a brand new software project. These are its very first release notes ever.
+	return `You are writing the first release notes for a new CLI tool. Describe what it does, not how it was built.
 
-Given the list of commits that made up this project, describe what the software DOES from a user perspective.
-
-CRITICAL:
-- Describe the product, not the build process. Do NOT say "Added X feature" — instead say what the tool can do
-- 3-6 bullet points in total under "## ✨ Features"
-- No "Fixes" category for an initial release — it's all new
-- Drop all implementation details (race conditions, refactors, CI, tests, error handling — that's table stakes)
-- Write for a user who wants to know if they should try this tool
-- Return ONLY the markdown, no preamble
-
-FORMAT:
-## ✨ Features
-- What the tool can do from a user's perspective
-- Each bullet is a capability, not a commit
+Rules:
+- Write from the user's perspective: what can they do with this tool, what problems does it solve
+- 3-5 bullets under ### ✨ Features, each describing a capability or behavior the user will notice
+- No Fixes section — this is a first release
+- Skip all implementation details: CI setup, refactors, test infrastructure, internal cleanups
+- One short summary sentence at the top (not a header, just a sentence)
+- Return ONLY the markdown. No preamble, no code fences, never mention that this is AI-generated
 
 COMMITS:`
 }
