@@ -8,8 +8,7 @@
 
 ---
 
-<!-- demo gif goes here -->
-<!-- ![demo](docs/demo.gif) -->
+![demo](docs/demo.png)
 
 ---
 

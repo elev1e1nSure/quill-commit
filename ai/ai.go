@@ -173,11 +173,13 @@ func Ask(req Request) (Decision, Usage, error) {
 		return fallback(), usage, fmt.Errorf("empty response")
 	}
 
-	content := strings.Trim(result.Choices[0].Message.Content, " \n")
-	content = strings.TrimPrefix(content, "```json")
-	content = strings.TrimPrefix(content, "```")
-	content = strings.TrimSuffix(content, "```")
-	content = strings.TrimSpace(content)
+	content := strings.TrimSpace(result.Choices[0].Message.Content)
+	if strings.HasPrefix(content, "```") {
+		content = strings.TrimPrefix(content, "```json")
+		content = strings.TrimPrefix(content, "```")
+		content = strings.TrimSuffix(content, "```")
+		content = strings.TrimSpace(content)
+	}
 	var decision Decision
 	if err := json.Unmarshal([]byte(content), &decision); err != nil {
 		return fallback(), usage, fmt.Errorf("parse decision: %w", err)

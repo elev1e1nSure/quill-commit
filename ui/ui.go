@@ -39,6 +39,12 @@ const boxOverhead = 4
 type tickMsg time.Time
 type spinnerMsg time.Time
 type eventMsg watcher.Event
+type headHashMsg struct {
+	hash    string
+	message string
+	isAmend bool
+	time    time.Time
+}
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
@@ -155,9 +161,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, spinnerTick())
 
 	case eventMsg:
-		m.applyEvent(watcher.Event(msg))
-		m.syncViewport()
+		e := watcher.Event(msg)
+		if e.Kind == watcher.EventCommit || e.Kind == watcher.EventAmend {
+			m.sending = false
+			m.stabilizing = false
+			m.amending = false
+			if e.Kind == watcher.EventCommit {
+				m.delayCounter = 0
+				m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
+			}
+			cmds = append(cmds, func() tea.Msg {
+				return headHashMsg{
+					hash:    git.HeadHash(),
+					message: e.Message,
+					isAmend: e.Kind == watcher.EventAmend,
+					time:    e.Time,
+				}
+			})
+		} else {
+			m.applyEvent(e)
+			m.syncViewport()
+		}
 		cmds = append(cmds, listenEvent(m.events))
+
+	case headHashMsg:
+		ts := stDim.Render(msg.time.Format("15:04"))
+		if msg.hash != "" {
+			m.lastCommit = stAccent2.Render(msg.hash) + " " + stText.Render(msg.message)
+			if msg.isAmend {
+				m.log = append(m.log, ts+"  "+stDim.Render("amended")+"  "+stAccent2.Render(msg.hash)+" "+stText.Render(msg.message))
+			} else {
+				m.log = append(m.log, ts+"  "+stAccent2.Render(msg.hash)+" "+stText.Render(msg.message))
+			}
+		} else {
+			m.lastCommit = stText.Render(msg.message)
+			if msg.isAmend {
+				m.log = append(m.log, ts+"  "+stDim.Render("amended")+"  "+stText.Render(msg.message))
+			} else {
+				m.log = append(m.log, ts+"  "+stText.Render(msg.message))
+			}
+		}
+		m.syncViewport()
 	}
 
 	if m.ready {
@@ -209,31 +253,7 @@ func (m *Model) applyEvent(e watcher.Event) {
 			}
 		}
 
-	case watcher.EventAmend:
-		m.amending = false
-		m.sending = false
-		hash := git.HeadHash()
-		if hash != "" {
-			m.lastCommit = stAccent2.Render(hash) + " " + stText.Render(e.Message)
-			m.log = append(m.log, ts+"  "+stDim.Render("amended")+"  "+stAccent2.Render(hash)+" "+stText.Render(e.Message))
-		} else {
-			m.lastCommit = stText.Render(e.Message)
-			m.log = append(m.log, ts+"  "+stDim.Render("amended")+"  "+stText.Render(e.Message))
-		}
 
-	case watcher.EventCommit:
-		m.sending = false
-		m.stabilizing = false
-		hash := git.HeadHash()
-		if hash != "" {
-			m.lastCommit = stAccent2.Render(hash) + " " + stText.Render(e.Message)
-			m.log = append(m.log, ts+"  "+stAccent2.Render(hash)+" "+stText.Render(e.Message))
-		} else {
-			m.lastCommit = stText.Render(e.Message)
-			m.log = append(m.log, ts+"  "+stText.Render(e.Message))
-		}
-		m.delayCounter = 0
-		m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
 
 	case watcher.EventForced:
 		m.delayCounter = 0
@@ -301,10 +321,12 @@ func (m Model) renderStatus() string {
 		nextStr = spinner + " " + stAccent2.Render("checking...")
 	case m.stabilizing:
 		nextStr = spinner + " " + stAccent2.Render("stabilizing...")
-	case int(remaining.Minutes()) > 0:
-		nextStr = stText.Render(fmt.Sprintf("next check in %dm %ds", int(remaining.Minutes()), int(remaining.Seconds())%60))
 	default:
-		nextStr = stText.Render(fmt.Sprintf("next check in %ds", int(remaining.Seconds())))
+		durStr := fmt.Sprintf("%ds", int(remaining.Seconds()))
+		if int(remaining.Minutes()) > 0 {
+			durStr = fmt.Sprintf("%dm %ds", int(remaining.Minutes()), int(remaining.Seconds())%60)
+		}
+		nextStr = spinner + " " + stAccent2.Render("waiting ("+durStr+")")
 	}
 
 	lastCommit := m.lastCommit

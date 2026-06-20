@@ -47,7 +47,7 @@ func quotePath(p string) string {
 }
 
 func Diff() (string, error) {
-	s, err := runGit("diff", "HEAD")
+	s, err := runGit("diff", "HEAD", "--", ".", ":(exclude)log.txt")
 	if err != nil {
 		return "", err
 	}
@@ -58,6 +58,9 @@ func Diff() (string, error) {
 	}
 	files := strings.Fields(untracked)
 	for _, f := range files {
+		if f == "log.txt" || strings.HasSuffix(f, "/log.txt") || strings.HasSuffix(f, "\\log.txt") {
+			continue
+		}
 		info, err := os.Stat(f)
 		if err != nil || info.Size() > 1024*1024 { // 1MB limit to avoid OOM
 			continue

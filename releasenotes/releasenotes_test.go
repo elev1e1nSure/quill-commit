@@ -59,7 +59,7 @@ func TestChat_emptyChoices(t *testing.T) {
 }
 
 func TestGetCommits_emptyRange(t *testing.T) {
-	commits, err := getCommits("HEAD", "HEAD")
+	commits, err := getCommits(context.Background(), "HEAD", "HEAD")
 	if err != nil {
 		t.Fatal(err)
 	}

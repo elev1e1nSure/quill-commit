@@ -14,7 +14,7 @@ const (
 	DefaultMaxDelays          = 0
 	DefaultModel              = "deepseek/deepseek-v4-flash"
 	DefaultIncludeContext     = true
-	DefaultContextBudget      = 8000
+	DefaultContextBudget      = 32000
 	DefaultRecentCommitsCount = 10
 	FileName                  = "quill.toml"
 )

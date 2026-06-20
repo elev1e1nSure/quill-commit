@@ -18,8 +18,10 @@ const (
 	readTimeout = 30 * time.Second
 )
 
+var client = &http.Client{Timeout: dialTimeout + readTimeout}
+
 func Generate(ctx context.Context, fromRef, toRef, apiKey, model string, initial bool) (string, error) {
-	commits, err := getCommits(fromRef, toRef)
+	commits, err := getCommits(ctx, fromRef, toRef)
 	if err != nil {
 		return "", fmt.Errorf("get commits: %w", err)
 	}
@@ -34,9 +36,9 @@ func Generate(ctx context.Context, fromRef, toRef, apiKey, model string, initial
 	return chat(ctx, model, apiKey, prompt, strings.Join(commits, "\n"))
 }
 
-func getCommits(fromRef, toRef string) ([]string, error) {
+func getCommits(ctx context.Context, fromRef, toRef string) ([]string, error) {
 	arg := fmt.Sprintf("%s..%s", fromRef, toRef)
-	out, err := exec.Command("git", "log", arg, "--pretty=format:%s").CombinedOutput()
+	out, err := exec.CommandContext(ctx, "git", "log", "--pretty=format:%s", "--", arg).CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}
@@ -116,12 +118,15 @@ func chat(ctx context.Context, model, apiKey, systemPrompt, userContent string) 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	client := &http.Client{Timeout: dialTimeout + readTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("http request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
 
 	var result struct {
 		Choices []struct {

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"quill-commit/git"
 )
@@ -61,6 +62,9 @@ func BuildStatic(repoRoot string) (Static, error) {
 			parts := strings.SplitN(f, "/", 2)
 			if len(parts) > 1 {
 				pkg := parts[0]
+				if strings.HasPrefix(pkg, ".") || pkg == "node_modules" {
+					continue
+				}
 				if !seen[pkg] {
 					seen[pkg] = true
 					pkgs = append(pkgs, pkg)
@@ -94,6 +98,7 @@ func BuildStatic(repoRoot string) (Static, error) {
 }
 
 func parseSection(content, sectionName string) string {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
 	lines := strings.Split(content, "\n")
 	var sectionLines []string
 	inSection := false
@@ -210,7 +215,22 @@ func RenderSystem(s Static, budgetChars int) string {
 		return projectStr + "## Stack\n" + s.Stack + "\n\n"
 	}
 
-	return projectStr + "## Stack\n" + s.Stack[:maxStackContentLen] + "\n\n"
+	return projectStr + "## Stack\n" + safeSlice(s.Stack, maxStackContentLen) + "\n\n"
+}
+
+func safeSlice(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	sub := s[:maxBytes]
+	for len(sub) > 0 {
+		r, size := utf8.DecodeLastRuneInString(sub)
+		if r != utf8.RuneError || size > 1 {
+			break
+		}
+		sub = sub[:len(sub)-1]
+	}
+	return sub
 }
 
 func RenderUser(d Dynamic, diff string) string {
