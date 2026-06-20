@@ -173,6 +173,19 @@ func (m *Model) syncViewport() {
 	if !m.ready {
 		return
 	}
+	// Always recompute viewport height from the actual rendered status block before
+	// calling GotoBottom. HandleWindowSize stores height using statusBlockHeight (constant)
+	// which is wrong when lastCommit wraps to a second line. A stale height makes
+	// GotoBottom compute a wrong YOffset, causing newest log entries to fall above
+	// the visible area.
+	if m.width > 0 && m.height > 0 {
+		statusH := lipgloss.Height(m.renderer.Status(m))
+		vpH := m.height - statusH - footerHeight - 3
+		if vpH < 3 {
+			vpH = 3
+		}
+		m.vp.Height = vpH
+	}
 	// Clamp each log line to viewport width so nothing wraps and shifts the layout.
 	maxW := m.vp.Width
 	clamped := make([]string, len(m.log))
@@ -192,13 +205,13 @@ func (m Model) View() string {
 		return "\n  " + stDim.Render("initializing...")
 	}
 	statusBlock := m.renderer.Status(&m)
-	// Dynamically fit the log viewport to whatever the status block actually renders to.
-	// Using a constant statusBlockHeight is fragile — any wrap in lastCommit shifts the layout.
+	// Recompute vpH here as a safety net for the first render (before any syncViewport call).
+	// After that, m.vp.Height is kept current by syncViewport on every event.
 	vpH := m.height - lipgloss.Height(statusBlock) - footerHeight - 3
 	if vpH < 3 {
 		vpH = 3
 	}
-	m.vp.Height = vpH // value receiver — local only, just for this render pass
+	m.vp.Height = vpH // local override — value receiver, affects only this render pass
 
 	middle := m.renderer.LogBlock(&m)
 	if m.showDetail && m.errorRaw != "" {

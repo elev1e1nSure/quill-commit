@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
@@ -232,11 +233,16 @@ func Ask(req Request) (Decision, Usage, error) {
 	if strings.HasPrefix(content, "```") {
 		content = strings.TrimPrefix(content, "```json")
 		content = strings.TrimPrefix(content, "```")
-		content = strings.TrimSuffix(content, "```")
+		// Strip trailing ``` (may have trailing text after it — handled by Decoder below).
+		if idx := strings.Index(content, "```"); idx != -1 {
+			content = content[:idx]
+		}
 		content = strings.TrimSpace(content)
 	}
+	// Use Decoder instead of Unmarshal: Decode() consumes the first valid JSON value and
+	// stops, so any trailing text the model appended after the object is silently ignored.
 	var decision Decision
-	if err := json.Unmarshal([]byte(content), &decision); err != nil {
+	if err := json.NewDecoder(strings.NewReader(content)).Decode(&decision); err != nil {
 		return fallback(), usage, fmt.Errorf("parse decision: %w", err)
 	}
 
@@ -279,10 +285,8 @@ func CacheCapability(model, apiKey string) (bool, error) {
 		return false, nil
 	}
 
-	for _, param := range *result.Data.SupportedParameters {
-		if param == "cache_control" {
-			return true, nil
-		}
+	if slices.Contains(*result.Data.SupportedParameters, "cache_control") {
+		return true, nil
 	}
 
 	return false, nil
@@ -353,12 +357,14 @@ func AskExplain(req Request) (Explanation, error) {
 	if strings.HasPrefix(content, "```") {
 		content = strings.TrimPrefix(content, "```json")
 		content = strings.TrimPrefix(content, "```")
-		content = strings.TrimSuffix(content, "```")
+		if idx := strings.Index(content, "```"); idx != -1 {
+			content = content[:idx]
+		}
 		content = strings.TrimSpace(content)
 	}
 
 	var expl Explanation
-	if err := json.Unmarshal([]byte(content), &expl); err != nil {
+	if err := json.NewDecoder(strings.NewReader(content)).Decode(&expl); err != nil {
 		return Explanation{Summary: "commit hook failed", Fix: "check the full error with ctrl+o"}, nil
 	}
 	return expl, nil
