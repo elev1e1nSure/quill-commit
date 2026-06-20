@@ -177,8 +177,11 @@ func AddPaths(paths []string) error {
 }
 
 func Commit(message string) error {
-	_, err := runGitWithStdin(message, "commit", "-F", "-")
-	return err
+	out, err := runGitWithStdin(message, "commit", "-F", "-")
+	if err != nil {
+		return fmt.Errorf("%v: %s", err, out)
+	}
+	return nil
 }
 
 func HeadMessage() (string, error) {
@@ -186,8 +189,11 @@ func HeadMessage() (string, error) {
 }
 
 func AmendCommit(message string) error {
-	_, err := runGitWithStdin(message, "commit", "--amend", "-F", "-")
-	return err
+	out, err := runGitWithStdin(message, "commit", "--amend", "-F", "-")
+	if err != nil {
+		return fmt.Errorf("%v: %s", err, out)
+	}
+	return nil
 }
 
 func IsRepo() bool {

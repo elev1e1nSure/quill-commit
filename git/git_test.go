@@ -15,6 +15,17 @@ func newTempRepo(t *testing.T) (string, func()) {
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
+
+	// Backup and unset git env vars that can interfere when tests run inside hooks
+	envBackup := make(map[string]string)
+	gitEnvVars := []string{"GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_PREFIX"}
+	for _, env := range gitEnvVars {
+		if val, exists := os.LookupEnv(env); exists {
+			envBackup[env] = val
+			os.Unsetenv(env)
+		}
+	}
+
 	origDir, err := os.Getwd()
 	if err != nil {
 		os.RemoveAll(dir)
@@ -34,6 +45,10 @@ func newTempRepo(t *testing.T) (string, func()) {
 	return dir, func() {
 		os.Chdir(origDir)  //nolint:errcheck
 		os.RemoveAll(dir)  //nolint:errcheck
+		// Restore env vars
+		for env, val := range envBackup {
+			os.Setenv(env, val)
+		}
 	}
 }
 

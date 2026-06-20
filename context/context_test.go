@@ -30,7 +30,7 @@ It spans multiple lines.
 ## Other Section
 Some other content.`
 
-	if err := os.WriteFile(filepath.Join(tmpDir, "CLAUDE.md"), []byte(claudeContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "CLAUDE.md"), []byte(claudeContent), 0600); err != nil {
 		t.Fatalf("failed to write CLAUDE.md: %v", err)
 	}
 
@@ -67,7 +67,7 @@ README Project.
 ## Stack
 README Stack.`
 
-	if err := os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte(readmeContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte(readmeContent), 0600); err != nil {
 		t.Fatalf("failed to write README.md: %v", err)
 	}
 
@@ -99,7 +99,7 @@ func TestBuildDynamic(t *testing.T) {
 	}()
 
 	// Happy path
-	recentCommitsFunc = func(n int) (string, error) {
+	recentCommitsFunc = func(_ int) (string, error) {
 		return "commit1\ncommit2", nil
 	}
 	statusShortFunc = func() (string, error) {
@@ -118,7 +118,7 @@ func TestBuildDynamic(t *testing.T) {
 	}
 
 	// Failure path (partial results + errors)
-	recentCommitsFunc = func(n int) (string, error) {
+	recentCommitsFunc = func(_ int) (string, error) {
 		return "", errors.New("recent commits error")
 	}
 	statusShortFunc = func() (string, error) {

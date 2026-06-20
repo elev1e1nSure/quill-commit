@@ -23,7 +23,7 @@ func TestBuildPrompt_endsWithCOMMITS(t *testing.T) {
 }
 
 func TestChat_success(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"choices":[{"message":{"content":"## ✨ Features\n- New feature"}}]}`)) //nolint:errcheck
 	}))
 	defer srv.Close()
@@ -43,7 +43,7 @@ func TestChat_success(t *testing.T) {
 }
 
 func TestChat_emptyChoices(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"choices":[]}`)) //nolint:errcheck
 	}))
 	defer srv.Close()

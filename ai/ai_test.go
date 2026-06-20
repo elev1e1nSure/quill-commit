@@ -305,7 +305,7 @@ func TestCacheCapability(t *testing.T) {
 		},
 		{
 			name: "absent",
-			handler: func(w http.ResponseWriter, r *http.Request) {
+			handler: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				if _, err := w.Write([]byte(`{"data":{"supported_parameters":["tools","something_else"]}}`)); err != nil {
 					t.Errorf("write error: %v", err)
@@ -318,7 +318,7 @@ func TestCacheCapability(t *testing.T) {
 		},
 		{
 			name: "missing field - empty object",
-			handler: func(w http.ResponseWriter, r *http.Request) {
+			handler: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				if _, err := w.Write([]byte(`{}`)); err != nil {
 					t.Errorf("write error: %v", err)
@@ -331,7 +331,7 @@ func TestCacheCapability(t *testing.T) {
 		},
 		{
 			name: "missing field - data null",
-			handler: func(w http.ResponseWriter, r *http.Request) {
+			handler: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				if _, err := w.Write([]byte(`{"data":null}`)); err != nil {
 					t.Errorf("write error: %v", err)
@@ -344,7 +344,7 @@ func TestCacheCapability(t *testing.T) {
 		},
 		{
 			name: "missing field - supported_parameters null",
-			handler: func(w http.ResponseWriter, r *http.Request) {
+			handler: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				if _, err := w.Write([]byte(`{"data":{"supported_parameters":null}}`)); err != nil {
 					t.Errorf("write error: %v", err)
@@ -357,7 +357,7 @@ func TestCacheCapability(t *testing.T) {
 		},
 		{
 			name: "500 error",
-			handler: func(w http.ResponseWriter, r *http.Request) {
+			handler: func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 			},
 			model:        "test-model",
@@ -367,7 +367,7 @@ func TestCacheCapability(t *testing.T) {
 		},
 		{
 			name: "timeout case",
-			handler: func(w http.ResponseWriter, r *http.Request) {
+			handler: func(w http.ResponseWriter, _ *http.Request) {
 				time.Sleep(100 * time.Millisecond)
 				w.WriteHeader(http.StatusOK)
 			},

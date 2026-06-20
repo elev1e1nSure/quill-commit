@@ -210,7 +210,7 @@ func New(ctx context.Context, cfg config.Config, apiKey string, repoRoot string)
 	}
 	w.sleepFn = w.sleep
 	if isTest {
-		w.sleepFn = func(d time.Duration) {}
+		w.sleepFn = func(_ time.Duration) {}
 	}
 	return w
 }
@@ -504,7 +504,7 @@ func (w *Watcher) doSplit(groups []ai.CommitGroup) {
 			continue
 		}
 		if err := w.git.Commit(g.Message); err != nil {
-			w.emit(EventSkip, "split: pre-commit hooks failed, retrying next tick")
+			w.emit(EventSkip, fmt.Sprintf("split: commit failed: %s", err))
 			w.prevDiff = ""
 			w.delayCounter = 0
 			return
@@ -554,7 +554,7 @@ func (w *Watcher) doCommit(message string) {
 		return
 	}
 	if err := w.git.Commit(message); err != nil {
-		w.emit(EventSkip, "pre-commit hooks failed, retrying next tick")
+		w.emit(EventSkip, fmt.Sprintf("commit failed: %s", err))
 		w.prevDiff = ""
 		w.delayCounter = 0
 		return

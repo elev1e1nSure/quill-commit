@@ -21,10 +21,9 @@ import (
 var version = "dev"
 
 var (
-	stTitle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#6C9BD2")).Bold(true)
-	stFlag    = lipgloss.NewStyle().Foreground(lipgloss.Color("#D4D4D4"))
-	stMeta    = lipgloss.NewStyle().Foreground(lipgloss.Color("#808080"))
-	stErr     = lipgloss.NewStyle().Foreground(lipgloss.Color("#D44A4A"))
+	stTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#6C9BD2")).Bold(true)
+	stFlag  = lipgloss.NewStyle().Foreground(lipgloss.Color("#D4D4D4"))
+	stMeta  = lipgloss.NewStyle().Foreground(lipgloss.Color("#808080"))
 )
 
 func printUsage() {
@@ -51,6 +50,13 @@ func printUsage() {
 }
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	flag.CommandLine.Init(flag.CommandLine.Name(), flag.ContinueOnError)
 	flag.CommandLine.SetOutput(&strings.Builder{})
 
@@ -64,29 +70,27 @@ func main() {
 
 	if len(os.Args) == 1 {
 		printUsage()
-		os.Exit(0)
+		return nil
 	}
 
 	err := flag.CommandLine.Parse(os.Args[1:])
 	if err != nil {
 		if err == flag.ErrHelp {
 			printUsage()
-			os.Exit(0)
+			return nil
 		}
-		fmt.Fprintf(os.Stderr, "%s %s\n\n", stErr.Render("error:"), err.Error())
 		printUsage()
-		os.Exit(1)
+		return err
 	}
 
 	if *versionFlag {
 		fmt.Println("quill-commit", version)
-		os.Exit(0)
+		return nil
 	}
 
 	apiKey := resolveAPIKey(*apiKeyFlag)
 	if apiKey == "" {
-		fmt.Fprintln(os.Stderr, "error: API key required — pass --api-key, set QUILL_API_KEY, or run once with --api-key to save it")
-		os.Exit(1)
+		return fmt.Errorf("API key required — pass --api-key, set QUILL_API_KEY, or run once with --api-key to save it")
 	}
 	if *apiKeyFlag != "" {
 		if err := credentials.Save(*apiKeyFlag); err != nil {
@@ -96,15 +100,13 @@ func main() {
 
 	repoRoot, err := git.RepoRoot()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: get git repo root:", err)
-		os.Exit(1)
+		return fmt.Errorf("get git repo root: %w", err)
 	}
 
 	configPath := filepath.Join(repoRoot, config.FileName)
 	cfg, created, err := config.EnsureDefault(configPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+		return err
 	}
 	if created {
 		fmt.Printf("created %s with defaults\n", configPath)
@@ -113,8 +115,7 @@ func main() {
 	dirty := false
 	if *presetFlag != "" {
 		if !config.ApplyPreset(&cfg, *presetFlag) {
-			fmt.Fprintf(os.Stderr, "error: unknown preset %q — valid presets: active, deep, aggressive\n", *presetFlag)
-			os.Exit(1)
+			return fmt.Errorf("unknown preset %q — valid presets: active, deep, aggressive", *presetFlag)
 		}
 		dirty = true
 	}
@@ -149,9 +150,9 @@ func main() {
 
 	p := tea.NewProgram(ui.New(cfg, w.Events, w.Cmds), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+		return err
 	}
+	return nil
 }
 
 // resolveAPIKey returns the first non-empty value from:

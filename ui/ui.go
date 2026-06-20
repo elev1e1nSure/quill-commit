@@ -116,7 +116,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			m.quitPending = true
-			return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg { return quitResetMsg{} })
+			return m, tea.Tick(3*time.Second, func(_ time.Time) tea.Msg { return quitResetMsg{} })
 		case "p":
 			if m.sending || m.amending {
 				break
@@ -243,9 +243,7 @@ func (m *Model) applyEvent(e watcher.Event) {
 
 	case watcher.EventDecision:
 		m.sending = false
-		if strings.Contains(e.Message, "commit:") {
-			// EventCommit handles the log entry
-		} else {
+		if !strings.Contains(e.Message, "commit:") {
 			var delayMin, delayCount, maxDelays int
 			n, err := fmt.Sscanf(e.Message, "model says wait %dm (delay %d/%d)", &delayMin, &delayCount, &maxDelays)
 			if n >= 2 && err == nil {
@@ -275,12 +273,13 @@ func (m *Model) applyEvent(e watcher.Event) {
 
 	case watcher.EventSkip:
 		m.delayCounter = 0
-		if strings.Contains(e.Message, "diff changed") {
+		switch {
+		case strings.Contains(e.Message, "diff changed"):
 			m.stabilizing = true
 			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Stabilize * float64(time.Minute)))
-		} else if strings.Contains(e.Message, "diff empty") {
+		case strings.Contains(e.Message, "diff empty"):
 			m.stabilizing = false
-		} else {
+		default:
 			m.stabilizing = false
 			m.log = append(m.log, ts+"  "+stText.Render(e.Message))
 		}

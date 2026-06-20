@@ -75,7 +75,7 @@ func newTestWatcher(g *fakeGit, a *fakeAI) *Watcher {
 	w := New(context.Background(), cfg, "key", "")
 	w.git = g
 	w.ai = a
-	w.sleepFn = func(d time.Duration) {} // mock sleep to be instantaneous
+	w.sleepFn = func(_ time.Duration) {} // mock sleep to be instantaneous
 	return w
 }
 
@@ -247,7 +247,7 @@ func TestWatcherSessionID(t *testing.T) {
 	}
 
 	oldCap := ai.CacheCapabilityFn
-	ai.CacheCapabilityFn = func(model, apiKey string) (bool, error) {
+	ai.CacheCapabilityFn = func(_, _ string) (bool, error) {
 		return true, nil
 	}
 	defer func() { ai.CacheCapabilityFn = oldCap }()
@@ -286,7 +286,7 @@ func TestWatcher_IncludeContext_HappyPath(t *testing.T) {
 
 	// Stub out CacheCapability
 	oldCap := ai.CacheCapabilityFn
-	ai.CacheCapabilityFn = func(model, apiKey string) (bool, error) {
+	ai.CacheCapabilityFn = func(_, _ string) (bool, error) {
 		return true, nil
 	}
 	defer func() { ai.CacheCapabilityFn = oldCap }()
@@ -298,7 +298,7 @@ func TestWatcher_IncludeContext_HappyPath(t *testing.T) {
 
 	// Create temp dir and mock CLAUDE.md
 	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "CLAUDE.md"), []byte("## Project\nTest Project\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "CLAUDE.md"), []byte("## Project\nTest Project\n"), 0600); err != nil {
 		t.Fatalf("failed to write CLAUDE.md: %v", err)
 	}
 
@@ -344,7 +344,7 @@ func TestWatcher_CacheMissesState(t *testing.T) {
 	}
 
 	oldCap := ai.CacheCapabilityFn
-	ai.CacheCapabilityFn = func(model, apiKey string) (bool, error) { return true, nil }
+	ai.CacheCapabilityFn = func(_, _ string) (bool, error) { return true, nil }
 	defer func() { ai.CacheCapabilityFn = oldCap }()
 
 	defer gitcontext.SetLsFilesFuncForTest(func() (string, error) { return "", nil })()
@@ -353,7 +353,7 @@ func TestWatcher_CacheMissesState(t *testing.T) {
 	shortProject := strings.Repeat("A", 100)
 	longStack := strings.Repeat("B", 1000)
 	content := "## Project\n" + shortProject + "\n\n## Stack\n" + longStack + "\n"
-	if err := os.WriteFile(filepath.Join(tmpDir, "CLAUDE.md"), []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "CLAUDE.md"), []byte(content), 0600); err != nil {
 		t.Fatalf("failed to write CLAUDE.md: %v", err)
 	}
 
@@ -446,13 +446,13 @@ func TestWatcher_BuildDynamic_Fail(t *testing.T) {
 	}
 
 	oldCap := ai.CacheCapabilityFn
-	ai.CacheCapabilityFn = func(model, apiKey string) (bool, error) { return true, nil }
+	ai.CacheCapabilityFn = func(_, _ string) (bool, error) { return true, nil }
 	defer func() { ai.CacheCapabilityFn = oldCap }()
 
 	defer gitcontext.SetLsFilesFuncForTest(func() (string, error) { return "", nil })()
 
 	// Inject failing BuildDynamic helpers
-	defer gitcontext.SetRecentCommitsFuncForTest(func(n int) (string, error) {
+	defer gitcontext.SetRecentCommitsFuncForTest(func(_ int) (string, error) {
 		return "", errors.New("recent commits error")
 	})()
 	defer gitcontext.SetStatusShortFuncForTest(func() (string, error) {
@@ -462,7 +462,7 @@ func TestWatcher_BuildDynamic_Fail(t *testing.T) {
 	var called bool
 	a := &fakeAI{
 		responses: []ai.Decision{{Commit: true, Message: "feat: commit"}},
-		AskFunc: func(req ai.Request) (ai.Decision, ai.Usage, error) {
+		AskFunc: func(_ ai.Request) (ai.Decision, ai.Usage, error) {
 			called = true
 			return ai.Decision{Commit: true, Message: "feat: commit"}, ai.Usage{}, nil
 		},
@@ -491,7 +491,7 @@ func TestWatcher_BuildStatic_Fail(t *testing.T) {
 	}
 
 	oldCap := ai.CacheCapabilityFn
-	ai.CacheCapabilityFn = func(model, apiKey string) (bool, error) { return true, nil }
+	ai.CacheCapabilityFn = func(_, _ string) (bool, error) { return true, nil }
 	defer func() { ai.CacheCapabilityFn = oldCap }()
 
 	// Inject failing BuildStatic helper
