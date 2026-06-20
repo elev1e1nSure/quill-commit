@@ -3,6 +3,7 @@
 **Automatic git commits powered by an LLM.** Watches your repo, waits for changes to stabilize, and commits them with a proper Conventional Commit message — without interrupting your flow.
 
 [![Release](https://img.shields.io/github/v/release/elev1e1nSure/quill-commit?style=flat-square&color=6C9BD2)](https://github.com/elev1e1nSure/quill-commit/releases)
+[![Downloads](https://img.shields.io/github/downloads/elev1e1nSure/quill-commit/total?style=flat-square&color=6C9BD2)](https://github.com/elev1e1nSure/quill-commit/releases)
 [![Go](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat-square&logo=go)](https://go.dev)
 [![License](https://img.shields.io/github/license/elev1e1nSure/quill-commit?style=flat-square&color=808080)](LICENSE)
 
