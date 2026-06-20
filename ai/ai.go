@@ -71,6 +71,7 @@ type Request struct {
 	APIKey        string
 	SessionID     string
 	ExplicitCache bool
+	Ctx           context.Context
 }
 
 type Usage struct {
@@ -140,7 +141,11 @@ func Ask(req Request) (Decision, Usage, error) {
 		return fallback(), Usage{}, fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequest(http.MethodPost, openRouterURL, bytes.NewReader(jsonBody))
+	ctx := req.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, openRouterURL, bytes.NewReader(jsonBody))
 	if err != nil {
 		return fallback(), Usage{}, fmt.Errorf("create request: %w", err)
 	}
