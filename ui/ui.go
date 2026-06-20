@@ -118,6 +118,7 @@ func listenEvent(ch <-chan watcher.Event) tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.handlers.m = &m // redirect handlers to the current local copy (value receiver)
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
