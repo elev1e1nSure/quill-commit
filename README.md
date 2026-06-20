@@ -15,7 +15,7 @@
 
 ## What it does
 
-You write code. quill-commit watches `git diff`, waits for the pace to slow down, then asks an LLM: *"is this a coherent unit of work?"* If yes — it commits with a generated [Conventional Commit](https://www.conventionalcommits.org) message. If no — it waits a bit and tries again. After too many noes, it force-commits so nothing ever gets lost.
+You write code. quill-commit watches `git diff`, waits for the pace to slow down, then asks an LLM: *"is this a coherent unit of work?"* If yes — it commits with a generated [Conventional Commit](https://www.conventionalcommits.org) message. If the diff contains several independent changes belonging to different scopes (e.g. a bugfix in one package and unrelated docs in another), it will split them into sequential, atomic commits. If no — it waits a bit and tries again. After too many noes, it force-commits so nothing ever gets lost.
 
 No heuristics. No line-count thresholds. Just the model looking at your actual diff.
 
@@ -61,6 +61,14 @@ Pick a rhythm that matches how you work:
 quill-commit --preset aggressive
 ```
 
+## TUI Controls & Hotkeys
+
+While `quill-commit` is running, you can control it interactively from the TUI:
+
+- **`p`**: Pause/resume the watcher. When paused, the status displays a red `PAUSED` indicator, and no checks will run.
+- **`a`**: Manually trigger an AI-assisted commit amendment. It takes your current staged and unstaged changes, retrieves the last commit message, sends both to the LLM to write a combined message, and runs `git commit --amend`.
+- **`q` / `ctrl+c`**: Quit the application. Requires a confirmation double-press within 3 seconds to prevent accidental exits.
+
 ## Configuration
 
 Settings are stored in `quill.toml` in your repo root and created automatically on first run.
@@ -69,10 +77,21 @@ Settings are stored in `quill.toml` in your repo root and created automatically 
 model      = "deepseek/deepseek-v4-flash"
 interval   = 2    # minutes between checks
 stabilize  = 1    # re-check cadence while diff is still changing
-max_delays = 3    # force-commit after this many consecutive "not yet"s
+max_delays = 0    # force-commit after this many consecutive delays (0 to disable)
 ```
 
 All flags override `quill.toml` and are saved back to it.
+
+### CLI Flags
+
+The following flags can be used to customize execution:
+- `--api-key <key>`: OpenRouter API key.
+- `--preset <preset>`: Config preset (`active`, `deep`, `aggressive`).
+- `--model <name>`: LLM model to query.
+- `--interval <mins>`: Interval between checks.
+- `--stabilize <mins>`: Stabilization delay.
+- `--max-delays <count>`: Max delays before forced commit (0 to disable).
+- `--version`: Print version information and exit.
 
 ## API key resolution
 

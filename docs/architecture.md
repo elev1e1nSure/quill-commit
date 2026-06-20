@@ -10,15 +10,20 @@ Commit discipline degrades under pressure. Developers either commit too rarely (
 
 ```
 tick (every interval)
- ├─ diff empty?   → skip, wait for next tick
+ ├─ paused?       → skip, wait for next tick/command
+ ├─ diff empty?   → skip, reset delay counter, wait for next tick
  └─ diff changed? → stabilization loop (sleep stabilize, re-check)
       └─ diff stable (same two checks in a row)? → send to model
-              ├─ commit: true  → git add -A && git commit
-              └─ commit: false → sleep delay, retry model (not next tick)
-                                  └─ max_delays hit → force commit
+              ├─ commit: true  → 
+              │    ├─ multiple commits (split)? → sequence: git add <files> && git commit
+              │    └─ single commit?             → git add -A && git commit
+              └─ commit: false → 
+                   ├─ max_delays hit (if > 0)?   → force commit
+                   └─ else                       → sleep delay, retry model
 ```
 
-After any commit, delay counter and stored diff both reset.
+After any commit (single, split, or forced), the delay counter and stored diff both reset.
+The delay counter also resets to 0 if a git/AI error occurs or if a check is skipped because the diff is empty or has changed during a delay loop, preventing stale delay states.
 
 ## Key design decisions
 
@@ -26,21 +31,28 @@ After any commit, delay counter and stored diff both reset.
 
 **LLM as the only oracle.** No heuristics, no line-count thresholds. The model sees the full diff — tracked changes plus untracked files — and reasons about logical completeness. Invalid JSON from the model → fallback commit (`auto: fallback commit`).
 
+**Split Commits for atomic history.** If a large, stable diff contains several independent changes belonging to different scopes (e.g., a bugfix in one package and unrelated documentation in another), the model can return a list of commit groups. The watcher stages only the specified files for each group and commits them sequentially. Any remaining unassigned files are swept into a final `chore: commit remaining changes` commit.
+
 **Network errors don't count.** A failed API call is not a delay. The counter only increments on explicit `commit: false`. This prevents network flakiness from burning through `max_delays`.
 
-**Force-commit as a safety net.** `max_delays` ensures nothing is ever silently lost, even if the model keeps saying "not yet."
+**Force-commit as a safety net.** `max_delays` (if set to > 0) ensures nothing is ever silently lost, even if the model keeps saying "not yet." If `max_delays = 0` (the default), forced commits are disabled, and the watcher will wait indefinitely for the model's approval.
 
 **Delay loop vs. ticker.** When the model says wait, the watcher sleeps inline (not waiting for the next tick). This decouples model-suggested delays from the stabilization interval — a 5-minute delay doesn't have to align with a 10-minute tick.
+
+**TUI Interactive Commands.** TUI users can send controls to the watcher:
+- `p` pauses/resumes the ticker.
+- `a` triggers a manual, AI-assisted commit amendment (adds current changes and amends the last commit with a merged message).
+- `q` / `ctrl+c` quits safely (requires a double-press confirmation).
 
 ## Package layout
 
 ```
 config/    Config struct, quill.toml read/write
-git/       Diff, Add, Commit, IsRepo, HeadHash, RecentCommits, StatusShort, LsFiles, RepoRoot
+git/       Diff, Add, AddPaths, Commit, IsRepo, HeadHash, HeadMessage, AmendCommit, RecentCommits, StatusShort, LsFiles, RepoRoot
 context/   BuildStatic, BuildDynamic, RenderSystem, RenderUser, Hash
 ai/        OpenRouter request, Decision struct, fallback, CacheCapability
-watcher/   Ticker, stabilization, delay loop, event emission, context/caching integration
-ui/        Bubbletea TUI — Status block + Log block
+watcher/   Ticker, stabilization, delay loop, command handling (Cmds), event emission, context/caching integration
+ui/        Bubbletea TUI — Status block + Log block + footer hints
 main.go    Flag parsing, startup checks, wires everything together
 ```
 

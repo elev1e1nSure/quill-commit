@@ -2,9 +2,9 @@ package git
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
-	"sort"
 	"strings"
 )
 
@@ -25,6 +25,27 @@ func runGitWithStdin(stdin string, args ...string) (string, error) {
 	return s, nil
 }
 
+func readHeader(path string, maxBytes int) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	buf := make([]byte, maxBytes)
+	n, err := f.Read(buf)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+	return buf[:n], nil
+}
+
+func quotePath(p string) string {
+	if strings.ContainsAny(p, " \t\"\\") {
+		return `"` + strings.ReplaceAll(p, `"`, `\"`) + `"`
+	}
+	return p
+}
+
 func Diff() (string, error) {
 	s, err := runGit("diff", "HEAD")
 	if err != nil {
@@ -37,18 +58,27 @@ func Diff() (string, error) {
 	}
 	files := strings.Fields(untracked)
 	for _, f := range files {
+		info, err := os.Stat(f)
+		if err != nil || info.Size() > 1024*1024 { // 1MB limit to avoid OOM
+			continue
+		}
+		header, err := readHeader(f, 8192)
+		if err != nil {
+			continue
+		}
+		if isBinary(header) {
+			continue
+		}
 		content, err := os.ReadFile(f)
 		if err != nil {
 			continue
 		}
-		if isBinary(content) {
-			continue
-		}
 		lines := strings.Split(strings.TrimSuffix(string(content), "\n"), "\n")
 		var b strings.Builder
-		fmt.Fprintf(&b, "diff --git a/%s b/%s\n", f, f)
+		qPath := quotePath(f)
+		fmt.Fprintf(&b, "diff --git a/%s b/%s\n", qPath, qPath)
 		fmt.Fprintf(&b, "new file mode 100644\n")
-		fmt.Fprintf(&b, "--- /dev/null\n+++ b/%s\n", f)
+		fmt.Fprintf(&b, "--- /dev/null\n+++ b/%s\n", qPath)
 		fmt.Fprintf(&b, "@@ -0,0 +1,%d @@\n", len(lines))
 		for _, l := range lines {
 			fmt.Fprintf(&b, "+%s\n", l)
@@ -95,9 +125,7 @@ func LsFiles() (string, error) {
 	if out == "" {
 		return "", nil
 	}
-	files := strings.Split(out, "\n")
-	sort.Strings(files)
-	return strings.Join(files, "\n"), nil
+	return out, nil
 }
 
 // isBinary checks if data looks binary (null byte in first 8k).

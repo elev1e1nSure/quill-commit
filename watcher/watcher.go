@@ -3,8 +3,11 @@ package watcher
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -113,6 +116,9 @@ type Watcher struct {
 	sessionID     string
 	explicitCache bool
 	cacheMisses   int
+
+	sleepFn       func(time.Duration)
+	repoRoot      string
 }
 
 func New(cfg config.Config, apiKey string, repoRoot string) *Watcher {
@@ -134,6 +140,14 @@ func New(cfg config.Config, apiKey string, repoRoot string) *Watcher {
 			b := make([]byte, 16)
 			if _, err := rand.Read(b); err != nil {
 				fmt.Fprintln(os.Stderr, "warn: generate session_id:", err)
+				now := time.Now().UnixNano()
+				for i := 0; i < 8; i++ {
+					b[i] = byte(now >> (i * 8))
+				}
+				pid := os.Getpid()
+				for i := 0; i < 4; i++ {
+					b[8+i] = byte(pid >> (i * 8))
+				}
 			}
 			sessionID = hex.EncodeToString(b)
 		}
@@ -149,7 +163,7 @@ func New(cfg config.Config, apiKey string, repoRoot string) *Watcher {
 		fullBudget = cfg.ContextBudget
 	}
 
-	return &Watcher{
+	w := &Watcher{
 		cfg:           cfg,
 		apiKey:        apiKey,
 		Events:        make(chan Event, 64),
@@ -161,11 +175,31 @@ func New(cfg config.Config, apiKey string, repoRoot string) *Watcher {
 		fullBudget:    fullBudget,
 		sessionID:     sessionID,
 		explicitCache: explicitCache,
+		repoRoot:      repoRoot,
+	}
+	w.sleepFn = w.sleep
+	if flag.Lookup("test.v") != nil {
+		w.sleepFn = func(d time.Duration) {}
+	}
+	return w
+}
+
+func (w *Watcher) sleep(d time.Duration) {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case cmd := <-w.Cmds:
+		w.handleCmd(cmd)
 	}
 }
 
 func (w *Watcher) Run() {
-	ticker := time.NewTicker(time.Duration(w.cfg.Interval * float64(time.Minute)))
+	interval := w.cfg.Interval
+	if interval <= 0 {
+		interval = config.DefaultInterval
+	}
+	ticker := time.NewTicker(time.Duration(interval * float64(time.Minute)))
 	defer ticker.Stop()
 
 	for {
@@ -252,15 +286,15 @@ func (w *Watcher) tick() {
 		w.emit(EventSkip, "diff empty, waiting")
 		w.prevDiff = ""
 		w.delayCounter = 0
-		time.Sleep(2 * time.Second)
+		w.sleepFn(2 * time.Second)
 		return
 	}
 
 	for diff != w.prevDiff {
 		w.emit(EventSkip, fmt.Sprintf("diff changed, re-checking in %s", formatDuration(w.cfg.Stabilize)))
-		time.Sleep(2 * time.Second)
+		w.sleepFn(2 * time.Second)
 		w.prevDiff = diff
-		time.Sleep(time.Duration(w.cfg.Stabilize * float64(time.Minute)))
+		w.sleepFn(time.Duration(w.cfg.Stabilize * float64(time.Minute)))
 		diff, err = w.git.Diff()
 		if err != nil {
 			w.emit(EventError, fmt.Sprintf("git diff: %s", err))
@@ -337,6 +371,9 @@ func (w *Watcher) delayLoop(stableDiff string) {
 				w.cacheMisses++
 				if w.cacheMisses >= 3 && w.staticBudget > 800 {
 					w.staticBudget = 800
+					if w.staticBudget > w.fullBudget {
+						w.staticBudget = w.fullBudget
+					}
 					w.cacheMisses = 0
 				}
 			}
@@ -366,8 +403,12 @@ func (w *Watcher) delayLoop(stableDiff string) {
 			return
 		}
 
-		w.emit(EventDelay, fmt.Sprintf("sleeping %dm before retry", decision.Delay))
-		time.Sleep(time.Duration(decision.Delay) * time.Minute)
+		delay := decision.Delay
+		if delay <= 0 {
+			delay = 1
+		}
+		w.emit(EventDelay, fmt.Sprintf("sleeping %dm before retry", delay))
+		w.sleepFn(time.Duration(delay) * time.Minute)
 
 		currentDiff, err := w.git.Diff()
 		if err != nil {
@@ -389,11 +430,18 @@ func (w *Watcher) delayLoop(stableDiff string) {
 func (w *Watcher) doSplit(groups []ai.CommitGroup) {
 	committed := false
 	for _, g := range groups {
-		if len(g.Files) == 0 || g.Message == "" {
+		var cleanFiles []string
+		for _, f := range g.Files {
+			f = strings.TrimSpace(f)
+			if f != "" {
+				cleanFiles = append(cleanFiles, f)
+			}
+		}
+		if len(cleanFiles) == 0 || g.Message == "" {
 			continue
 		}
-		if err := w.git.AddPaths(g.Files); err != nil {
-			w.emit(EventError, fmt.Sprintf("split: git add %v: %s", g.Files, err))
+		if err := w.git.AddPaths(cleanFiles); err != nil {
+			w.emit(EventError, fmt.Sprintf("split: git add %v: %s", cleanFiles, err))
 			continue
 		}
 		if err := w.git.Commit(g.Message); err != nil {
@@ -454,9 +502,23 @@ func (w *Watcher) doCommit(message string) {
 }
 
 func (w *Watcher) emit(kind EventKind, msg string) {
+	name, ok := EventKindNames[kind]
+	if !ok {
+		name = fmt.Sprintf("UnknownEvent(%d)", kind)
+	}
+
+	if w.repoRoot != "" {
+		logPath := filepath.Join(w.repoRoot, "log.txt")
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		if err == nil {
+			fmt.Fprintf(f, "%s [%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), name, msg)
+			f.Close()
+		}
+	}
+
 	select {
 	case w.Events <- newEvent(kind, msg):
 	default:
-		fmt.Fprintf(os.Stderr, "warn: event channel full, dropped %s: %s\n", EventKindNames[kind], msg)
+		fmt.Fprintf(os.Stderr, "warn: event channel full, dropped %s: %s\n", name, msg)
 	}
 }

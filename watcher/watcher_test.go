@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"quill-commit/ai"
 	"quill-commit/config"
@@ -73,6 +74,7 @@ func newTestWatcher(g *fakeGit, a *fakeAI) *Watcher {
 	w := New(cfg, "key", "")
 	w.git = g
 	w.ai = a
+	w.sleepFn = func(d time.Duration) {} // mock sleep to be instantaneous
 	return w
 }
 

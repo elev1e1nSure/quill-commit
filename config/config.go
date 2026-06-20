@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/pelletier/go-toml/v2"
@@ -80,10 +81,10 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
 
-	if cfg.Interval <= 0 {
+	if math.IsNaN(cfg.Interval) || math.IsInf(cfg.Interval, 0) || cfg.Interval <= 0 {
 		cfg.Interval = DefaultInterval
 	}
-	if cfg.Stabilize <= 0 {
+	if math.IsNaN(cfg.Stabilize) || math.IsInf(cfg.Stabilize, 0) || cfg.Stabilize <= 0 {
 		cfg.Stabilize = cfg.Interval / 2
 	}
 	if cfg.MaxDelays < 0 {
@@ -114,15 +115,19 @@ func Save(path string, cfg Config) error {
 }
 
 func EnsureDefault(path string) (Config, bool, error) {
-	cfg, err := Load(path)
-	if err == nil {
+	_, statErr := os.Stat(path)
+	if statErr == nil {
+		cfg, err := Load(path)
+		if err != nil {
+			return Config{}, false, fmt.Errorf("load config: %w", err)
+		}
 		return cfg, false, nil
 	}
-	if !os.IsNotExist(err) {
-		return Config{}, false, fmt.Errorf("load config: %w", err)
+	if !os.IsNotExist(statErr) {
+		return Config{}, false, fmt.Errorf("stat config: %w", statErr)
 	}
 
-	cfg = Default()
+	cfg := Default()
 	data, err := toml.Marshal(cfg)
 	if err != nil {
 		return Config{}, false, fmt.Errorf("marshal config: %w", err)
@@ -141,10 +146,14 @@ func EnsureDefault(path string) (Config, bool, error) {
 		}
 		return Config{}, false, fmt.Errorf("create config: %w", err)
 	}
-	defer f.Close()
 
 	if _, err := f.Write(data); err != nil {
+		f.Close()
 		return Config{}, false, fmt.Errorf("write config: %w", err)
+	}
+
+	if err := f.Close(); err != nil {
+		return Config{}, false, fmt.Errorf("close config: %w", err)
 	}
 
 	return cfg, true, nil
