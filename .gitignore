@@ -2,9 +2,14 @@
 quill-commit
 quill-commit.exe
 *.exe
+*.dll
+*.so
+*.dylib
 
 # Go
 vendor/
+go.work
+go.work.sum
 *.test
 *.out
 
@@ -18,19 +23,20 @@ vendor/
 .DS_Store
 Thumbs.db
 
-# Local config with secrets
-# quill.toml
-# .env
-# .env.*
+# Secrets & local config
+.env
+.env.*
+quill.toml
 
 # Logs
 *.log
+log.txt
 
 # Node
 node_modules/
-quill-commit
-quill-commit.exe~
-log.txt
+
+# Notes & drafts
 plan.md
 plan_security_filter.md
-quill.toml
+roadmap.md
+todo.md
