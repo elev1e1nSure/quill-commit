@@ -27,8 +27,11 @@ var (
 )
 
 // statusBlockHeight is the fixed line count of the rendered status block
-// (top border + title + 4 content rows + hints row + bottom border = 8).
-const statusBlockHeight = 8
+// (top border + title + 3 content rows + bottom border = 6).
+const statusBlockHeight = 6
+
+// footerHeight is the single hints line rendered below the log block.
+const footerHeight = 1
 
 // boxOverhead is the total horizontal chars added by boxStyle (2 borders + 2 padding each side = 4).
 const boxOverhead = 4
@@ -126,7 +129,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		vpH := m.height - statusBlockHeight - 3 // log block: top border + title + bottom border = 3 overhead
+		vpH := m.height - statusBlockHeight - footerHeight - 3 // log block: top border + title + bottom border = 3 overhead
 		if vpH < 3 {
 			vpH = 3
 		}
@@ -279,6 +282,7 @@ func (m Model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left,
 		m.renderStatus(),
 		m.renderLogBlock(),
+		m.renderHints(),
 	)
 }
 
@@ -314,25 +318,12 @@ func (m Model) renderStatus() string {
 		lastCommit = stDim.Render(dot) + " " + lastCommit
 	}
 
-	pauseKey := "p: pause"
-	if m.paused {
-		pauseKey = "p: resume"
-	}
-	var hintsStr string
-	if m.quitPending {
-		hintsStr = stWarn.Render("press q / ctrl+c again to quit")
-	} else {
-		hintsStr = stDim.Render(fmt.Sprintf("%s  a: amend  q: quit", pauseKey))
-	}
-
 	lbl := func(s string) string { return stDim.Render(fmt.Sprintf("%-12s", s)) }
 	rows := strings.Join([]string{
 		stTitle.Render("info"),
 		lbl("status") + "  " + nextStr,
 		lbl("delays") + "  " + stText.Render(fmt.Sprintf("%d / %d", m.delayCounter, m.cfg.MaxDelays)),
 		lbl("last commit") + "  " + lastCommit,
-		"",
-		hintsStr,
 	}, "\n")
 
 	return boxStyle.Width(m.width - boxOverhead).Render(rows)
@@ -341,4 +332,20 @@ func (m Model) renderStatus() string {
 func (m Model) renderLogBlock() string {
 	content := stTitle.Render("log") + "\n" + m.vp.View()
 	return boxStyle.Width(m.width - boxOverhead).Render(content)
+}
+
+// renderHints draws the keybinding footer: keys in white, descriptions dim.
+func (m Model) renderHints() string {
+	if m.quitPending {
+		return "  " + stWarn.Render("press q / ctrl+c again to quit")
+	}
+	pauseDesc := "pause"
+	if m.paused {
+		pauseDesc = "resume"
+	}
+	hint := func(key, desc string) string {
+		return stText.Render(key) + stDim.Render(": "+desc)
+	}
+	sep := stDim.Render("   ")
+	return "  " + hint("p", pauseDesc) + sep + hint("a", "amend") + sep + hint("q", "quit")
 }
