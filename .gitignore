@@ -30,3 +30,4 @@ quill.toml
 node_modules/
 quill-commit
 quill-commit.exe~
+log.txt

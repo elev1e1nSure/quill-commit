@@ -37,3 +37,17 @@
 2026-06-20 03:41:53 [EventSkip] diff changed, re-checking in 4s
 2026-06-20 03:42:00 [EventSending] asking model
 2026-06-20 03:42:31 [EventDecision] model says split into 2 commits
+2026-06-20 03:42:42 [EventCommit] docs: update README with demo screenshot
+2026-06-20 03:42:44 [EventSkip] split: pre-commit hooks failed, retrying next tick
+2026-06-20 03:42:44 [EventCheck] checking diff
+2026-06-20 03:42:44 [EventSkip] diff empty, waiting
+2026-06-20 03:42:50 [EventCheck] checking diff
+2026-06-20 03:42:50 [EventSkip] diff empty, waiting
+2026-06-20 03:42:56 [EventCheck] checking diff
+2026-06-20 03:42:56 [EventSkip] diff empty, waiting
+2026-06-20 03:43:02 [EventCheck] checking diff
+2026-06-20 03:43:02 [EventSkip] diff empty, waiting
+2026-06-20 03:43:08 [EventCheck] checking diff
+2026-06-20 03:43:08 [EventSkip] diff changed, re-checking in 4s
+2026-06-20 03:43:15 [EventSending] asking model
+2026-06-20 03:43:20 [EventDecision] model says commit: chore(config): add log.txt to gitignore
