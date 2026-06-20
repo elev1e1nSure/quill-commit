@@ -1,4 +1,4 @@
-interval = 0.1
+interval = 0.01
 stabilize = 0.08
 max_delays = 5
 model = 'deepseek/deepseek-v4-flash'
