@@ -12,17 +12,20 @@ import (
 	"quill-commit/ai"
 	"quill-commit/config"
 	gitcontext "quill-commit/context"
+	"quill-commit/git"
 )
 
 // --- fakes ---
 
 type fakeGit struct {
-	diffs      []string
-	diffIdx    int
-	added      bool
-	addedPaths []string
-	commits    []string
-	diffErr    error
+	diffs        []string
+	diffIdx      int
+	added        bool
+	addedPaths   []string
+	commits      []string
+	diffErr      error
+	diffResult   git.DiffResult
+	hasDiffResult bool
 }
 
 func (f *fakeGit) Diff() (string, error) {
@@ -35,6 +38,39 @@ func (f *fakeGit) Diff() (string, error) {
 	d := f.diffs[f.diffIdx]
 	f.diffIdx++
 	return d, nil
+}
+
+func (f *fakeGit) DiffEx(repoRoot string) (git.DiffResult, error) {
+	if f.diffErr != nil {
+		return git.DiffResult{}, f.diffErr
+	}
+	if f.hasDiffResult {
+		return f.diffResult, nil
+	}
+	d, err := f.Diff()
+	if err != nil {
+		return git.DiffResult{}, err
+	}
+	// For existing tests that don't set diffResult, derive a simple IncludedFiles list.
+	// This preserves backward compatibility.
+	return git.DiffResult{Diff: d, IncludedFiles: extractFilesFromDiff(d)}, nil
+}
+
+func extractFilesFromDiff(diff string) []string {
+	var files []string
+	for _, line := range strings.Split(diff, "\n") {
+		if strings.HasPrefix(line, "diff --git a/") {
+			parts := strings.SplitN(line, " b/", 2)
+			if len(parts) == 2 {
+				files = append(files, strings.TrimSpace(parts[1]))
+			}
+		}
+	}
+	if len(files) == 0 && diff != "" {
+		// Fallback for legacy tests that use plain diff strings without git headers.
+		return []string{"_unparsed"}
+	}
+	return files
 }
 
 func (f *fakeGit) Add() error                   { f.added = true; return nil }
@@ -503,6 +539,180 @@ func TestWatcher_BuildStatic_Fail(t *testing.T) {
 	w := New(context.Background(), cfg, "key", t.TempDir())
 	if w.ctxMgr.static.Project != "" || len(w.ctxMgr.static.Packages) != 0 {
 		t.Error("expected empty Static context on failure")
+	}
+}
+
+// Quarantine tests
+
+func TestQuarantine_NewFingerprint_EmitsOnce(t *testing.T) {
+	g := &fakeGit{hasDiffResult: true, diffResult: git.DiffResult{
+		Diff:          "",
+		IncludedFiles: []string{},
+		ExcludedFiles: []string{".env", "secrets.yaml"},
+	}}
+	a := &fakeAI{responses: []ai.Decision{{Commit: false, Delay: 0}}}
+	w := newTestWatcher(g, a)
+
+	w.tick()
+
+	evs := collectEvents(w)
+	var foundInfo bool
+	for _, e := range evs {
+		if e.Kind == EventInfo && strings.Contains(e.Message, "quarantine") {
+			foundInfo = true
+		}
+	}
+	if !foundInfo {
+		t.Errorf("expected quarantine EventInfo, got %v", evs)
+	}
+	// Model should NOT be called.
+	if a.respIdx != 0 {
+		t.Errorf("expected model not called, got %d requests", a.respIdx)
+	}
+}
+
+func TestQuarantine_SameFingerprint_Silent(t *testing.T) {
+	g := &fakeGit{hasDiffResult: true, diffResult: git.DiffResult{
+		Diff:          "",
+		IncludedFiles: []string{},
+		ExcludedFiles: []string{".env"},
+	}}
+	a := &fakeAI{responses: []ai.Decision{{Commit: false, Delay: 0}}}
+	w := newTestWatcher(g, a)
+
+	w.tick() // first tick emits info
+	w.tick() // second tick should be silent
+
+	evs := collectEvents(w)
+	var count int
+	for _, e := range evs {
+		if e.Kind == EventInfo && strings.Contains(e.Message, "quarantine") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 quarantine info, got %d", count)
+	}
+}
+
+func TestQuarantine_Reset_WhenNormalFilesAppear(t *testing.T) {
+	g := &fakeGit{hasDiffResult: true, diffResult: git.DiffResult{
+		Diff:          "",
+		IncludedFiles: []string{},
+		ExcludedFiles: []string{".env"},
+	}}
+	a := &fakeAI{responses: []ai.Decision{{Commit: false, Delay: 0}}}
+	w := newTestWatcher(g, a)
+
+	w.tick()
+	if w.quarantineFingerprint == "" {
+		t.Fatal("expected quarantine fingerprint set")
+	}
+
+	// Now normal file appears.
+	g.diffResult = git.DiffResult{
+		Diff:          "diff --git a/main.go b/main.go\n--- /dev/null\n+++ b/main.go\n@@ -0,0 +1,1 @@\n+package main\n",
+		IncludedFiles: []string{"main.go"},
+		ExcludedFiles: []string{".env"},
+	}
+	w.tick()
+
+	if w.quarantineFingerprint != "" {
+		t.Error("expected quarantine fingerprint reset")
+	}
+}
+
+func TestCommitEngine_OnlyStagedIncludedFiles(t *testing.T) {
+	g := &fakeGit{hasDiffResult: true, diffResult: git.DiffResult{
+		Diff:          "diff content",
+		IncludedFiles: []string{"a.go", "b.md"},
+		ExcludedFiles: []string{".env"},
+	}}
+	ce := newCommitEngine(g, "", func(EventKind, string) {}, func(EventKind, string, string) {})
+
+	if err := ce.Commit("test"); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	if len(g.addedPaths) != 2 || g.addedPaths[0] != "a.go" || g.addedPaths[1] != "b.md" {
+		t.Errorf("expected AddPaths [a.go b.md], got %v", g.addedPaths)
+	}
+}
+
+func TestCommitEngine_NoFiles_ErrNoDiff(t *testing.T) {
+	g := &fakeGit{hasDiffResult: true, diffResult: git.DiffResult{
+		Diff:          "",
+		IncludedFiles: []string{},
+		ExcludedFiles: []string{".env"},
+	}}
+	ce := newCommitEngine(g, "", func(EventKind, string) {}, func(EventKind, string, string) {})
+
+	if err := ce.Commit("test"); err != errNoDiff {
+		t.Fatalf("expected errNoDiff, got %v", err)
+	}
+	if len(g.addedPaths) != 0 {
+		t.Errorf("expected no AddPaths, got %v", g.addedPaths)
+	}
+}
+
+func TestCommitEngine_Amend_StagesIncludedFiles(t *testing.T) {
+	g := &fakeGit{hasDiffResult: true, diffResult: git.DiffResult{
+		Diff:          "diff content",
+		IncludedFiles: []string{"a.go"},
+		ExcludedFiles: []string{},
+	}}
+	ce := newCommitEngine(g, "", func(EventKind, string) {}, func(EventKind, string, string) {})
+
+	if err := ce.Amend("amend msg", true); err != nil {
+		t.Fatalf("Amend: %v", err)
+	}
+	if len(g.addedPaths) != 1 || g.addedPaths[0] != "a.go" {
+		t.Errorf("expected AddPaths [a.go], got %v", g.addedPaths)
+	}
+}
+
+func TestCommitEngine_Split_SkipsExcludedFiles(t *testing.T) {
+	g := &fakeGit{hasDiffResult: true, diffResult: git.DiffResult{
+		Diff:          "diff content",
+		IncludedFiles: []string{"a.go"},
+		ExcludedFiles: []string{"secrets.pem"},
+	}}
+	var emitted []string
+	emit := func(k EventKind, msg string) {
+		emitted = append(emitted, msg)
+	}
+	ce := newCommitEngine(g, "", emit, func(EventKind, string, string) {})
+
+	groups := []ai.CommitGroup{
+		{Message: "feat: add", Files: []string{"a.go", "secrets.pem"}},
+	}
+	if err := ce.Split(groups); err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+
+	// a.go should be staged, secrets.pem skipped.
+	var hasAgo, hasSecrets bool
+	for _, p := range g.addedPaths {
+		if p == "a.go" {
+			hasAgo = true
+		}
+		if p == "secrets.pem" {
+			hasSecrets = true
+		}
+	}
+	if !hasAgo {
+		t.Errorf("expected a.go in addedPaths, got %v", g.addedPaths)
+	}
+	if hasSecrets {
+		t.Errorf("expected secrets.pem NOT in addedPaths, got %v", g.addedPaths)
+	}
+	var foundSkip bool
+	for _, msg := range emitted {
+		if strings.Contains(msg, "skipping filtered file secrets.pem") {
+			foundSkip = true
+		}
+	}
+	if !foundSkip {
+		t.Errorf("expected skip warning for secrets.pem, got %v", emitted)
 	}
 }
 

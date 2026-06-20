@@ -9,14 +9,15 @@ import (
 
 // Stabilizer waits until the git diff stops changing.
 type Stabilizer struct {
-	cfg     config.Config
-	git     gitOps
-	sleepFn func(time.Duration)
+	cfg      config.Config
+	git      gitOps
+	repoRoot string
+	sleepFn  func(time.Duration)
 }
 
 // newStabilizer creates a Stabilizer.
-func newStabilizer(cfg config.Config, g gitOps, sleepFn func(time.Duration)) *Stabilizer {
-	return &Stabilizer{cfg: cfg, git: g, sleepFn: sleepFn}
+func newStabilizer(cfg config.Config, g gitOps, repoRoot string, sleepFn func(time.Duration)) *Stabilizer {
+	return &Stabilizer{cfg: cfg, git: g, repoRoot: repoRoot, sleepFn: sleepFn}
 }
 
 // Stabilize fetches the current diff and waits until it is unchanged for the
@@ -25,11 +26,12 @@ func newStabilizer(cfg config.Config, g gitOps, sleepFn func(time.Duration)) *St
 // value, and true on success. On error or empty diff it returns empty strings
 // and false.
 func (st *Stabilizer) Stabilize(prevDiff string, onChange func()) (stableDiff string, newPrevDiff string, ok bool) {
-	diff, err := st.git.Diff()
+	res, err := st.git.DiffEx(st.repoRoot)
 	if err != nil {
 		return "", "", false
 	}
 
+	diff := res.Diff
 	if diff == "" {
 		return "", "", false
 	}
@@ -41,10 +43,11 @@ func (st *Stabilizer) Stabilize(prevDiff string, onChange func()) (stableDiff st
 		st.sleepFn(2 * time.Second)
 		prevDiff = diff
 		st.sleepFn(time.Duration(st.cfg.Stabilize * float64(time.Minute)))
-		diff, err = st.git.Diff()
+		res, err = st.git.DiffEx(st.repoRoot)
 		if err != nil {
 			return "", "", false
 		}
+		diff = res.Diff
 		if diff == "" {
 			return "", "", false
 		}

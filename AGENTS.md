@@ -1,0 +1,1 @@
+Before any edit or discussion read [CLAUDE.md](CLAUDE.md)

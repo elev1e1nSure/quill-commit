@@ -14,9 +14,9 @@ tick (every interval)
  ├─ diff empty?   → skip, reset delay counter, wait for next tick
  └─ diff changed? → stabilization loop (sleep stabilize, re-check)
       └─ diff stable (same two checks in a row)? → send to model
-              ├─ commit: true  → 
-              │    ├─ multiple commits (split)? → sequence: git add <files> && git commit
-              │    └─ single commit?             → git add -A && git commit
+              └─ commit: true  → 
+              │    ├─ multiple commits (split)? → sequence: git add -- <files> && git commit
+              │    └─ single commit?             → git add -- <IncludedFiles> && git commit
               └─ commit: false → 
                    ├─ max_delays hit (if > 0)?   → force commit
                    └─ else                       → sleep delay, retry model
@@ -27,13 +27,15 @@ The delay counter also resets to 0 if a git/AI error occurs or if a check is ski
 
 ### Commit-blocked retry
 
-When a commit is rejected (e.g. pre-commit hook failure), the watcher stores the stable diff in `commitBlockedDiff`. On subsequent ticks, if the diff has not changed, the tick is silently skipped — preventing spam. Once the user modifies the working tree (diff changes), normal operation resumes. The model is also asked to explain the error and a short summary + fix suggestion is shown in the TUI.
+When a commit is rejected (e.g. pre-commit hook failure), the watcher stores a SHA-256 fingerprint of the stable diff in `blockedDiffHashes`. On subsequent ticks, if the diff hash matches, the tick is silently skipped — preventing spam. Once the user modifies the working tree (diff changes), normal operation resumes. The model is also asked to explain the error and a short summary + fix suggestion is shown in the TUI.
 
 ## Key design decisions
 
 **Two-speed stabilization.** `interval` controls how often the watcher starts a fresh check when nothing is happening. Once a non-empty diff appears, the watcher switches to `stabilize` re-checks (typically `interval / 2`) until the diff is unchanged — only then does it send to the model. This matters most for the `aggressive` preset: a 30s interval with a 15s stabilize re-check catches the pause-between-bursts faster than waiting another 30s for the next ticker.
 
-**LLM as the only oracle.** No heuristics, no line-count thresholds. The model sees the full diff — tracked changes plus untracked files — and reasons about logical completeness. Invalid JSON from the model → fallback commit (`auto: fallback commit`).
+**LLM as the only oracle.** No heuristics, no line-count thresholds. The model sees the filtered diff — tracked changes plus untracked files after path and content filtering — and reasons about logical completeness. Invalid JSON from the model → fallback commit (`auto: fallback commit`).
+
+**Security filters as intentional guardrails.** The three-layer secret filter (path filter, content scan, add filter) is a deliberate deviation from the "no heuristics" principle. Secrets are removed from the diff *before* the model sees them, and only files that pass both filters are ever staged. This prevents accidental leakage of credentials to the LLM and into git history. The model is never shown `.env`, `.pem`, `id_rsa`, or any file containing known token signatures (e.g. `sk-or-v1-`, `AKIA`, `ghp_`).
 
 **Split Commits for atomic history.** If a large, stable diff contains several independent changes belonging to different scopes (e.g., a bugfix in one package and unrelated documentation in another), the model can return a list of commit groups. The watcher stages only the specified files for each group and commits them sequentially. Any remaining unassigned files are swept into a final `chore: commit remaining changes` commit.
 
@@ -59,10 +61,12 @@ When a commit is rejected (e.g. pre-commit hook failure), the watcher stores the
 ```
 credentials/ API key persistence to ~/.config/quill-commit/credentials
 config/      Config struct, quill.toml read/write, presets
-git/         Diff, Add, AddPaths, Commit, IsRepo, HeadHash, HeadMessage, AmendCommit, RecentCommits, StatusShort, LsFiles, RepoRoot
+pathfilter/  Hardcoded secret path patterns + .quillignore parser (doublestar)
+secretscan/  Regex-based secret signature detection (API keys, tokens)
+git/         Diff, DiffEx, Add, AddPaths, Commit, IsRepo, HeadHash, HeadMessage, AmendCommit, RecentCommits, StatusShort, LsFiles, RepoRoot
 context/     BuildStatic, BuildDynamic, RenderSystem, RenderUser, Hash
 ai/          OpenRouter request, Decision struct, fallback, CacheCapability
-watcher/     Scheduler, stabilization, delay loop, context manager, commit engine, event logging, command handling
+watcher/     Scheduler, stabilization, delay loop, context manager, commit engine, event logging, command handling, quarantine
 ui/          Bubbletea TUI — Status block + Log block + footer hints
 releasenotes/ AI-powered release note generation from git history
 cmd/releasenotes/ CLI entrypoint for release notes (go run ./cmd/releasenotes)
