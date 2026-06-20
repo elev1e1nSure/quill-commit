@@ -27,7 +27,7 @@ The delay counter also resets to 0 if a git/AI error occurs or if a check is ski
 
 ### Commit-blocked retry
 
-When a commit is rejected (e.g. pre-commit hook failure), the watcher stores the stable diff in `commitBlockedDiff`. On subsequent ticks, if the diff has not changed, the tick is silently skipped — preventing spam. Once the user modifies the working tree (diff changes), normal operation resumes. The model is also asked to explain the error and a short summary + fix suggestion is shown in the TUI.
+When a commit is rejected (e.g. pre-commit hook failure), the watcher stores a SHA-256 fingerprint of the stable diff in `blockedDiffHashes`. On subsequent ticks, if the diff hash matches, the tick is silently skipped — preventing spam. Once the user modifies the working tree (diff changes), normal operation resumes. The model is also asked to explain the error and a short summary + fix suggestion is shown in the TUI.
 
 ## Key design decisions
 

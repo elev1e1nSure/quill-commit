@@ -42,7 +42,9 @@ func TestUserPatterns(t *testing.T) {
 	// Simulate .quillignore content.
 	tmpDir := t.TempDir()
 	ignorePath := filepath.Join(tmpDir, ".quillignore")
-	os.WriteFile(ignorePath, []byte("*.log\ntemp/\nbuild/**\n"), 0644)
+	if err := os.WriteFile(ignorePath, []byte("*.log\ntemp/\nbuild/**\n"), 0644); err != nil {
+		t.Fatalf("write .quillignore: %v", err)
+	}
 
 	if err := f.LoadIgnoreFile(ignorePath); err != nil {
 		t.Fatal(err)
@@ -80,7 +82,9 @@ func TestQuillIgnoreParsing(t *testing.T) {
 # Another comment
 build
 `
-	os.WriteFile(ignorePath, []byte(content), 0644)
+	if err := os.WriteFile(ignorePath, []byte(content), 0644); err != nil {
+		t.Fatalf("write .quillignore: %v", err)
+	}
 
 	if err := f.LoadIgnoreFile(ignorePath); err != nil {
 		t.Fatal(err)

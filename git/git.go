@@ -91,11 +91,7 @@ func DiffEx(repoRoot string) (DiffResult, error) {
 
 	filter := pathfilter.New()
 	if repoRoot != "" {
-		ignorePath := filepath.Join(repoRoot, ".quillignore")
-		if err := filter.LoadIgnoreFile(ignorePath); err != nil && !os.IsNotExist(err) {
-			// Non-fatal: log would go here if we had a logger in this package.
-			// We silently proceed with hardcoded patterns only.
-		}
+		filter.LoadIgnoreFile(filepath.Join(repoRoot, ".quillignore")) //nolint:errcheck
 	}
 
 	// --- Tracked files ---

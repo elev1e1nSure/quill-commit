@@ -52,19 +52,33 @@ func newTempRepo(t *testing.T) (string, func()) {
 	}
 }
 
+func mustWriteFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func mustRun(t *testing.T, name string, args ...string) {
+	t.Helper()
+	if out, err := exec.Command(name, args...).CombinedOutput(); err != nil {
+		t.Fatalf("%s %v: %v\n%s", name, args, err, out)
+	}
+}
+
 func TestDiffExNameOnlyFilter(t *testing.T) {
 	dir, cleanup := newTempRepo(t)
 	defer cleanup()
 
 	// Create a secret file and a normal file.
-	os.WriteFile(filepath.Join(dir, ".env"), []byte("SECRET=123\n"), 0644)
-	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0644)
-	exec.Command("git", "add", ".").Run()
-	exec.Command("git", "commit", "-m", "initial").Run()
+	mustWriteFile(t, filepath.Join(dir, ".env"), "SECRET=123\n")
+	mustWriteFile(t, filepath.Join(dir, "main.go"), "package main\n")
+	mustRun(t, "git", "add", ".")
+	mustRun(t, "git", "commit", "-m", "initial")
 
 	// Modify both.
-	os.WriteFile(filepath.Join(dir, ".env"), []byte("SECRET=456\n"), 0644)
-	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".env"), "SECRET=456\n")
+	mustWriteFile(t, filepath.Join(dir, "main.go"), "package main\n\nfunc main() {}\n")
 
 	res, err := DiffEx(dir)
 	if err != nil {
@@ -105,12 +119,12 @@ func TestDiffExTrackedSecretExcluded(t *testing.T) {
 	dir, cleanup := newTempRepo(t)
 	defer cleanup()
 
-	os.WriteFile(filepath.Join(dir, "config.go"), []byte("package main\n"), 0644)
-	exec.Command("git", "add", ".").Run()
-	exec.Command("git", "commit", "-m", "initial").Run()
+	mustWriteFile(t, filepath.Join(dir, "config.go"), "package main\n")
+	mustRun(t, "git", "add", ".")
+	mustRun(t, "git", "commit", "-m", "initial")
 
 	// Add a secret line to a tracked file.
-	os.WriteFile(filepath.Join(dir, "config.go"), []byte("package main\n\n// key: sk-or-v1-abc123def456ghi789jkl012mno345pqr678stu\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "config.go"), "package main\n\n// key: sk-or-v1-abc123def456ghi789jkl012mno345pqr678stu\n")
 
 	res, err := DiffEx(dir)
 	if err != nil {
@@ -147,12 +161,12 @@ func TestDiffExUntrackedSecret(t *testing.T) {
 	defer cleanup()
 
 	// Make an initial commit so HEAD exists.
-	os.WriteFile(filepath.Join(dir, "a.go"), []byte("package main\n"), 0644)
-	exec.Command("git", "add", ".").Run()
-	exec.Command("git", "commit", "-m", "initial").Run()
+	mustWriteFile(t, filepath.Join(dir, "a.go"), "package main\n")
+	mustRun(t, "git", "add", ".")
+	mustRun(t, "git", "commit", "-m", "initial")
 
 	// Create an untracked file with a secret.
-	os.WriteFile(filepath.Join(dir, "tokens.txt"), []byte("api_key=sk-or-v1-abc123def456ghi789jkl012mno345pqr678stu\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "tokens.txt"), "api_key=sk-or-v1-abc123def456ghi789jkl012mno345pqr678stu\n")
 
 	res, err := DiffEx(dir)
 	if err != nil {
@@ -180,10 +194,10 @@ func TestDiffExBackwardCompatible(t *testing.T) {
 	dir, cleanup := newTempRepo(t)
 	defer cleanup()
 
-	os.WriteFile(filepath.Join(dir, "a.go"), []byte("package main\n"), 0644)
-	exec.Command("git", "add", ".").Run()
-	exec.Command("git", "commit", "-m", "initial").Run()
-	os.WriteFile(filepath.Join(dir, "a.go"), []byte("package main\n\nfunc main() {}\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.go"), "package main\n")
+	mustRun(t, "git", "add", ".")
+	mustRun(t, "git", "commit", "-m", "initial")
+	mustWriteFile(t, filepath.Join(dir, "a.go"), "package main\n\nfunc main() {}\n")
 
 	oldDiff, err := Diff()
 	if err != nil {

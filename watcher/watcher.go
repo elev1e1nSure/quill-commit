@@ -82,15 +82,15 @@ type aiOps interface {
 	Ask(req ai.Request) (ai.Decision, ai.Usage, error)
 }
 
-type realGit struct{ repoRoot string }
+type realGit struct{}
 
-func (rg realGit) Diff() (string, error)                     { return git.Diff() }
-func (rg realGit) DiffEx(repoRoot string) (git.DiffResult, error) { return git.DiffEx(repoRoot) }
-func (rg realGit) Add() error                               { return git.Add() }
-func (rg realGit) AddPaths(paths []string) error            { return git.AddPaths(paths) }
-func (rg realGit) Commit(message string) error              { return git.Commit(message) }
-func (rg realGit) HeadMessage() (string, error)              { return git.HeadMessage() }
-func (rg realGit) AmendCommit(message string) error         { return git.AmendCommit(message) }
+func (realGit) Diff() (string, error)                          { return git.Diff() }
+func (realGit) DiffEx(repoRoot string) (git.DiffResult, error) { return git.DiffEx(repoRoot) }
+func (realGit) Add() error                                     { return git.Add() }
+func (realGit) AddPaths(paths []string) error                  { return git.AddPaths(paths) }
+func (realGit) Commit(message string) error                    { return git.Commit(message) }
+func (realGit) HeadMessage() (string, error)                   { return git.HeadMessage() }
+func (realGit) AmendCommit(message string) error               { return git.AmendCommit(message) }
 
 type realAI struct{}
 
@@ -172,7 +172,7 @@ func New(ctx context.Context, cfg config.Config, apiKey string, repoRoot string)
 		apiKey:   apiKey,
 		Events:   events,
 		Cmds:     cmds,
-		git:      realGit{repoRoot: repoRoot},
+		git:      realGit{},
 		ai:       realAI{},
 		sleepFn:  sleepFn,
 		ctx:      ctx,

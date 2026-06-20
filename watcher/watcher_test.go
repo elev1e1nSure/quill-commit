@@ -47,7 +47,10 @@ func (f *fakeGit) DiffEx(repoRoot string) (git.DiffResult, error) {
 	if f.hasDiffResult {
 		return f.diffResult, nil
 	}
-	d, _ := f.Diff()
+	d, err := f.Diff()
+	if err != nil {
+		return git.DiffResult{}, err
+	}
 	// For existing tests that don't set diffResult, derive a simple IncludedFiles list.
 	// This preserves backward compatibility.
 	return git.DiffResult{Diff: d, IncludedFiles: extractFilesFromDiff(d)}, nil
