@@ -12,6 +12,8 @@
 
 ---
 
+> **⚠️ This tool automatically commits to your repo.** It runs `git add -A` and `git commit` without manual review. Changes are written to your local git history automatically. You are responsible for every commit. Use with caution on shared or protected branches.
+
 ## What it does
 
 You write code. quill-commit watches `git diff`, waits for the pace to slow down, then asks an LLM: *"is this a coherent unit of work?"* If yes — it commits with a generated [Conventional Commit](https://www.conventionalcommits.org) message. If the diff contains several independent changes belonging to different scopes (e.g. a bugfix in one package and unrelated docs in another), it will split them into sequential, atomic commits. If no — it waits a bit and tries again. After too many noes, it force-commits so nothing ever gets lost.
