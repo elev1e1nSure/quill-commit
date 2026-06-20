@@ -306,6 +306,7 @@ func (w *Watcher) doAmend() {
 		APIKey:        w.apiKey,
 		SessionID:     w.sessionID,
 		ExplicitCache: false,
+		Ctx:           w.ctx,
 	}
 
 	w.emit(EventSending, "asking model (amend)")
@@ -406,6 +407,7 @@ func (w *Watcher) delayLoop(stableDiff string) {
 			APIKey:        w.apiKey,
 			SessionID:     w.sessionID,
 			ExplicitCache: w.explicitCache,
+			Ctx:           w.ctx,
 		}
 
 		w.emit(EventSending, "asking model")
