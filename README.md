@@ -1,11 +1,10 @@
 # quill-commit
 
-**AI-powered auto-commits.** Watches your repo, waits for your changes to stabilize, asks a model if the diff makes sense as a commit — and commits it with a proper message.
+**Automatic git commits powered by an LLM.** Watches your repo, waits for changes to stabilize, and commits them with a proper Conventional Commit message — without interrupting your flow.
 
 [![Release](https://img.shields.io/github/v/release/elev1e1nSure/quill-commit?style=flat-square&color=6C9BD2)](https://github.com/elev1e1nSure/quill-commit/releases)
 [![Go](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat-square&logo=go)](https://go.dev)
 [![License](https://img.shields.io/github/license/elev1e1nSure/quill-commit?style=flat-square&color=808080)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/elev1e1nSure/quill-commit/total?style=flat-square&color=6C9BD2)](https://github.com/elev1e1nSure/quill-commit/releases)
 
 ---
 
@@ -13,27 +12,27 @@
 
 ---
 
-> **⚠️ This tool automatically commits to your repo.** It stages only the changes it sees through its filters and commits them without manual review. Changes are written to your local git history automatically. You are responsible for every commit. Use with caution on shared or protected branches.
+> **This tool commits to your repo automatically.** It stages only the changes that pass its filters and writes them to your local git history without manual review. You are responsible for every commit. Use with caution on shared or protected branches.
 
-## What it does
+## How it works
 
-You write code. quill-commit watches `git diff`, waits for the pace to slow down, then asks an LLM: *"is this a coherent unit of work?"* If yes — it commits with a generated [Conventional Commit](https://www.conventionalcommits.org) message. If the diff contains several independent changes belonging to different scopes (e.g. a bugfix in one package and unrelated docs in another), it will split them into sequential, atomic commits. Any remaining unassigned files are swept into a final `chore: commit remaining changes` commit. If no — it waits a bit and tries again. After too many noes, it force-commits so nothing ever gets lost.
+You write code. quill-commit watches `git diff`, waits for the pace to slow down, then asks an LLM: *is this a coherent unit of work?* If yes — it commits with a generated [Conventional Commit](https://www.conventionalcommits.org) message. If the diff contains several independent changes, it splits them into sequential atomic commits. If the model keeps saying *not yet* — after a configurable number of retries, it commits anyway so nothing gets lost.
 
-If a commit is blocked by a pre-commit hook, quill-commit detects the unchanged diff and stays silent until you change something. It also asks the model to explain the failure and shows the suggestion in the TUI.
+If a pre-commit hook blocks the commit, quill-commit stays silent on unchanged diffs and asks the model to explain what went wrong — the explanation appears in the TUI.
 
-No heuristics. No line-count thresholds. Just the model looking at your actual diff.
+No heuristics. No line-count thresholds. The model sees your actual diff and decides.
 
-## Security & secret filtering
+## Secret filtering
 
-quill-commit has three independent layers to prevent secrets from ever reaching the LLM or being committed:
+Three independent layers prevent credentials from reaching the LLM or being committed:
 
-1. **Path filter** — hardcoded exclusions for known secret files: `.env`, `.env.*`, `*.pem`, `*.key`, `*_rsa`, `*.p12`, `credentials*`, `secrets*`. You can add your own patterns in a `.quillignore` file (same syntax as `.gitignore`).
-2. **Content scan** — scans added lines and untracked files for known secret signatures (OpenAI `sk-or-v1-`, AWS `AKIA`, GitHub `ghp_`/`ghs_`, Slack `xox...`, Google `AIza`). If a match is found, the file is excluded entirely.
-3. **Add filter** — instead of `git add -A`, quill-commit stages only the specific files that passed both filters above. Even if a file slips through the diff layer, it will never be staged.
+1. **Path filter** — hardcoded exclusions for known secret files: `.env`, `.env.*`, `*.pem`, `*.key`, `*_rsa`, `*.p12`, `credentials*`, `secrets*`. Add your own patterns in `.quillignore` (gitignore syntax).
+2. **Content scan** — scans added lines and untracked files for known token signatures: OpenRouter `sk-or-v1-`, AWS `AKIA`, GitHub `ghp_`/`ghs_`, Slack `xox...`, Google `AIza`. A single match excludes the entire file.
+3. **Staging guard** — replaces `git add -A` with targeted `git add -- <safe-files>`. Even if a file slips through the diff layer, it is never staged.
 
-If your working directory contains **only** secret files (e.g. an old `.env` you haven't removed), quill-commit goes into *quarantine*: it silently skips (with one log message) and does not call the model. It automatically resumes as soon as normal code changes appear.
+If the working directory contains **only** blocked files, quill-commit enters *quarantine*: it skips silently (one log message) and waits for normal code changes before resuming.
 
-See `.quillignore.example` for a template.
+See `.quillignore.example` for a ready-to-use template.
 
 ## Install
 
@@ -51,13 +50,13 @@ just build
 
 ## Quickstart
 
-Get an API key from [openrouter.ai](https://openrouter.ai), then:
+Get a free API key from [openrouter.ai](https://openrouter.ai), then:
 
 ```sh
 quill-commit --api-key <your-key>
 ```
 
-The key is saved for future runs. Next time just:
+The key is saved automatically. Next time just:
 
 ```sh
 quill-commit
@@ -65,10 +64,10 @@ quill-commit
 
 ## Presets
 
-Pick a rhythm that matches how you work:
+Three built-in rhythm presets cover most workflows:
 
-| Preset | Checks every | Re-checks during changes | Max delays | For |
-|--------|-------------|--------------------------|------------|-----|
+| Preset | Check every | Re-check every | Max retries | Best for |
+|--------|-------------|----------------|-------------|----------|
 | `active` *(default)* | 2 min | 1 min | 3 | Normal coding sessions |
 | `deep` | 5 min | 2.5 min | 2 | Long focused work, big refactors |
 | `aggressive` | 30 sec | 15 sec | 4 | Fast feedback loops |
@@ -77,68 +76,66 @@ Pick a rhythm that matches how you work:
 quill-commit --preset aggressive
 ```
 
-## TUI Controls & Hotkeys
+You can also tune individual values in `quill.toml` without using a preset.
 
-While `quill-commit` is running, you can control it interactively from the TUI:
+## TUI controls
 
-- **`p`**: Pause/resume the watcher. When paused, the status displays a red `PAUSED` indicator, and no checks will run.
-- **`a`**: Manually trigger an AI-assisted commit amendment. It takes your current staged and unstaged changes, retrieves the last commit message, sends both to the LLM to write a combined message, and runs `git commit --amend`.
-- **`q` / `ctrl+c`**: Quit the application. Requires a confirmation double-press within 3 seconds to prevent accidental exits.
-- **`ctrl+o`**: Toggle detail view when a commit was blocked by a pre-commit hook (shows raw error and AI explanation).
+| Key | Action |
+|-----|--------|
+| `p` | Pause / resume |
+| `a` | Manually trigger AI amend on the last commit |
+| `q` / `ctrl+c` | Quit (double-press to confirm) |
+| `ctrl+o` | Toggle full error detail when a commit is blocked |
 
-The TUI displays a status block (current state, next check, delay counter, model name), a scrolling log of events, and hint bar showing available hotkeys.
-
-### Events shown in the log
-
-| Event | Description |
-|-------|-------------|
-| Check | Ticker fired, checking diff |
-| Sending | Asking the model |
-| Decision | Model responded (commit or wait) |
-| Commit | Commit succeeded |
-| Forced | Max delays reached, force-committing |
-| Skip | Diff empty or changed during stabilization |
-| Delay | Sleeping before retry |
-| Error | Git or AI error |
-| Amend | Manual amend completed |
-| Info | Informational message |
-| Commit blocked | Pre-commit hook rejected the commit |
-| Explain | AI explanation of a commit failure |
+The TUI shows the current state, next-check timer, retry counter, and a scrollable log of commits and errors. Routine operational events (checks, delays, model decisions) are shown in the status bar only — the log stays clean.
 
 ## Configuration
 
-Settings are stored in `quill.toml` in your repo root and created automatically on first run.
+`quill.toml` is created automatically in your repo root on first run:
 
 ```toml
 model            = "deepseek/deepseek-v4-flash"
 interval         = 2      # minutes between checks
-stabilize        = 1      # re-check cadence while diff is still changing
-max_delays       = 0      # force-commit after this many consecutive delays (0 to disable)
-include_context  = true   # send project context (CLAUDE.md, packages, recent commits) to model
-context_budget   = 32000  # max chars for static context before truncation
-recent_commits   = 10     # number of recent commits to include in context
-session_id       = ""     # OpenRouter session ID (auto-generated if empty)
+stabilize        = 1      # re-check cadence while diff is still changing (minutes)
+max_delays       = 0      # force-commit after this many model "wait" responses (0 = never)
+include_context  = true   # send project context (README, packages, recent commits) to model
+context_budget   = 32000  # max chars of static context (truncated if exceeded)
+recent_commits   = 10     # recent commit messages included in context
+session_id       = ""     # OpenRouter session routing hint (auto-generated)
 ```
 
-All flags override `quill.toml` and are saved back to it.
+All CLI flags override `quill.toml` and are persisted back to it.
 
-### CLI Flags
+### CLI flags
 
-- `--api-key <key>`: OpenRouter API key.
-- `--preset <preset>`: Config preset (`active`, `deep`, `aggressive`).
-- `--model <name>`: LLM model to query.
-- `--interval <mins>`: Interval between checks.
-- `--stabilize <mins>`: Stabilization re-check interval.
-- `--max-delays <count>`: Max delays before forced commit (0 to disable).
-- `--version`: Print version information and exit.
+| Flag | Description |
+|------|-------------|
+| `--api-key <key>` | OpenRouter API key |
+| `--preset <name>` | Apply a named preset (`active`, `deep`, `aggressive`) |
+| `--model <name>` | LLM model to use |
+| `--interval <mins>` | Check interval in minutes |
+| `--stabilize <mins>` | Stabilization re-check interval |
+| `--max-delays <n>` | Max retries before forced commit |
+| `--version` | Print version and exit |
 
 ## API key resolution
 
 First match wins:
 
 1. `--api-key` flag
-2. `QUILL_API_KEY` env var
-3. Credentials file (`~/.config/quill-commit/credentials` on Linux/macOS, `%APPDATA%\quill-commit\credentials` on Windows)
+2. `QUILL_API_KEY` environment variable
+3. Credentials file: `~/.config/quill-commit/credentials` (Linux/macOS) or `%APPDATA%\quill-commit\credentials` (Windows)
+
+## Logs
+
+`log.txt` is written to the repo root using structured `log/slog` (text format). It captures every watcher event with level, timestamp, event kind, and — for errors — the raw error detail. The file is gitignored automatically and never committed.
+
+Filter by level for debugging:
+
+```sh
+grep "level=ERROR" log.txt
+grep "level=WARN"  log.txt
+```
 
 ## Release notes
 
@@ -150,13 +147,7 @@ just release-notes FROM=v1.0.0 TO=v1.1.0
 go run ./cmd/releasenotes --from=v1.0.0 --to=v1.1.0 --api-key <key>
 ```
 
-Flags: `--from` (required), `--to` (default HEAD), `--model`, `--initial` (writes an initial-release description).
-
-## Logs
-
-The watcher writes structured, level-based logs to `log.txt` in the repository root using Go's standard library `log/slog` (categorized under `DEBUG`, `INFO`, `WARN`, and `ERROR`). This file is excluded from git diffs and automatically added to `.gitignore`.
-
 ## Docs
 
-- [Architecture](docs/architecture.md) — how the watcher, stabilization, and LLM loop work
-- [Development](docs/development.md) — build, test, lint
+- [Architecture](docs/architecture.md) — watcher logic, stabilization, LLM loop, security design
+- [Development](docs/development.md) — build, test, lint, release

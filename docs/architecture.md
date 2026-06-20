@@ -51,10 +51,11 @@ When a commit is rejected (e.g. pre-commit hook failure), the watcher stores a S
 - `q` / `ctrl+c` quits safely (requires a double-press confirmation).
 - `ctrl+o` toggles detail view for blocked commits (raw error + AI explanation).
 
-**Structured Event Logging.** Logs are written to `log.txt` in the repository root using Go's standard library `log/slog`.
-- To optimize disk and I/O operations, the log file is opened once at watcher startup and closed on shutdown.
-- Log events map directly to standard severities (`DEBUG`, `INFO`, `WARN`, `ERROR`), permitting straightforward filtering.
-- Logging is skipped in test runs to prevent OS file locks.
+**Structured Event Logging.** All watcher events are written to `log.txt` in the repository root using Go's standard `log/slog` with `TextHandler`.
+- The log file is opened once at startup and closed on shutdown.
+- Each entry carries `event=<kind>` in snake_case. Error events additionally include a `detail` attribute with the first meaningful line of the raw error (and `detail_lines=N` when the full detail spans multiple lines).
+- Level mapping: `ERROR` for errors and blocked commits; `WARN` for forced commits; `DEBUG` for routine operational events (check, skip, delay, decision); `INFO` for everything else (send, commit, amend, info).
+- Logging is skipped in test runs to prevent OS file locks on Windows.
 
 ## Package layout
 
@@ -115,27 +116,29 @@ To make commit decisions more accurate, `quill-commit` constructs a project cont
 ## Commit error handling
 
 When `Commit` or `Split` fail (pre-commit hook rejects the commit), the watcher:
-1. Stores the current stable diff in `commitBlockedDiff`.
+1. Records a SHA-256 fingerprint of the failing diff in `blockedDiffHashes`.
 2. Emits `EventCommitError` with the raw error text.
-3. Optionally calls `AskExplain` — sends the error to the model with a explain-error prompt, then emits `EventErrorExplain` with a user-facing summary and fix.
+3. Calls `AskExplain` — sends the error to the model with an explain-error prompt, then emits `EventErrorExplain` with a user-facing summary and fix suggestion.
 
-The TUI shows `commit blocked  ctrl+o for details`; pressing `ctrl+o` toggles between raw error and AI explanation.
+The TUI shows the first meaningful error line inline; pressing `ctrl+o` toggles the full raw error and AI explanation.
 
 ## TUI events
 
-The watcher emits typed events to a buffered channel; the TUI consumes them via `Presenter`:
+The watcher emits typed events to a buffered channel; the TUI consumes them via `Presenter`.
 
-| Event | When |
-|-------|------|
-| `EventCheck` | Each tick starts |
-| `EventSending` | About to send request to the model |
-| `EventDecision` | Model responded (commit or wait) |
-| `EventCommit` | Commit succeeded |
-| `EventAmend` | Manual amend completed |
-| `EventForced` | Max delays hit, forcing commit |
-| `EventSkip` | Diff empty or changed during stabilization |
-| `EventDelay` | About to sleep before retry |
-| `EventError` | Git or AI error |
-| `EventInfo` | Informational message (e.g. amend nothing, context warn) |
-| `EventCommitError` | Pre-commit hook or script blocked the commit |
-| `EventErrorExplain` | AI explanation of a commit failure |
+All events are written to `log.txt` (see [Structured Event Logging](#structured-event-logging) below). Only significant events appear in the TUI log block — routine operational events (`check`, `skip`, `delay`, `decision`) update the status bar and timer but produce no log entry, keeping the visible log clean.
+
+| Event | Level | TUI log entry |
+|-------|-------|---------------|
+| `EventCheck` | DEBUG | — (updates status bar) |
+| `EventSending` | INFO | — (updates status bar) |
+| `EventDecision` | DEBUG | — (updates timer/counter) |
+| `EventCommit` | INFO | `hash  message` |
+| `EventAmend` | INFO | `amended  hash  message` |
+| `EventForced` | WARN | `forced  max delays reached, committing` |
+| `EventSkip` | DEBUG | — (updates status bar) |
+| `EventDelay` | DEBUG | — (updates status bar timer) |
+| `EventError` | ERROR | `error  short description` |
+| `EventInfo` | INFO | `quarantine  N secret files blocked` (quarantine only) |
+| `EventCommitError` | ERROR | `blocked  first meaningful error line  ctrl+o` |
+| `EventErrorExplain` | INFO | `→  AI summary` |
