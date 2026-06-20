@@ -93,25 +93,16 @@ func (p *Presenter) ApplyEvent(m *Model, e watcher.Event) (logEntry string) {
 		m.errorFix = ""
 		m.showDetail = false
 		m.statusLockedUntil = e.Time.Add(2 * time.Second)
-		summary := firstMeaningfulLine(e.Detail)
-		// Write the entry directly so we can remember its index for in-place patching.
 		m.blockedTs = ts
-		m.blockedSummary = summary
-		m.blockedLogIdx = len(m.log)
-		m.log = append(m.log, blockedLine(ts, summary, ""))
+		m.blockedSummary = firstMeaningfulLine(e.Detail)
+		m.blockedEntry = blockedLine(m.blockedTs, m.blockedSummary, "")
 		return ""
 
 	case watcher.EventErrorExplain:
 		m.sending = false
 		m.errorFix = e.Detail
-		if m.blockedLogIdx >= 0 && m.blockedLogIdx < len(m.log) {
-			// Patch the existing blocked line in-place — no second row.
-			m.log[m.blockedLogIdx] = blockedLine(m.blockedTs, m.blockedSummary, e.Message)
-			m.blockedLogIdx = -1
-			return ""
-		}
-		// Fallback: no blocked entry to patch (e.g. commit happened in between).
-		return ts + "  " + stDim.Render("→") + "  " + stText.Render(e.Message)
+		m.blockedEntry = blockedLine(m.blockedTs, m.blockedSummary, e.Message)
+		return ""
 	}
 
 	return ""

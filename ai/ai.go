@@ -51,6 +51,33 @@ For split:       {"commit": true, "commits": [{"files": ["path/a.go"], "message"
 
 Use exact file paths from the diff headers (the path after "diff --git a/").
 
+COMMIT MESSAGE RULES — read carefully, violations are the most common mistake:
+
+type(scope): description
+
+TYPES — pick the first one that matches, in this order:
+  fix      Something broken is now working. A bug is corrected. Behavior that was wrong is now right.
+           Examples: wrong output, crash, off-by-one, incorrect state, UI element not updating.
+  feat     New capability that did not exist before. Adds something the user can now do.
+           Examples: new flag, new command, new API endpoint, new screen, new config option.
+  refactor Code restructured with NO behavior change. Same inputs, same outputs, different internals.
+           Examples: rename, extract function, reorganize packages, simplify logic (no fix, no feat).
+  perf     Same behavior, measurably faster or uses less memory/CPU/disk.
+  test     Adding or fixing tests only. No production code changed.
+  docs     Only documentation files changed (.md, comments, README).
+  chore    Tooling, CI, build scripts, dependency bumps, config files — nothing the user runs.
+  style    Formatting only — whitespace, indentation, no logic change.
+  build    Changes to the build system (Makefile, Justfile, Dockerfile, go.mod version bump).
+  ci       Changes to CI/CD pipeline files only.
+
+SCOPE — the package, module, or subsystem. Use the directory or package name: ai, ui, watcher, config, git, pathfilter, secretscan, context, credentials, releasenotes, main. Omit if the change spans more than two scopes (use no scope) or if it genuinely does not fit any.
+
+DESCRIPTION — lowercase, imperative mood, no period. Say WHAT changed, not why.
+  Good: "clamp log lines to viewport width before GotoBottom"
+  Bad:  "fix bug", "update stuff", "improve performance", "various changes"
+
+DECISION RULE — if you are unsure between fix and feat, ask: did something that worked incorrectly now work correctly? → fix. Did something that did not exist now exist? → feat.
+
 PRIOR DECISIONS block: if the user message begins with "PRIOR DECISIONS:", those are your own past conclusions about this exact diff. Read them before deciding. Do not reverse a prior "wait" decision unless the diff has visibly changed or enough time has passed to justify it. If you do change your decision, your "reason" must explain why.
 
 SOLO vs SPLIT:

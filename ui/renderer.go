@@ -72,8 +72,19 @@ func (r *Renderer) Status(m *Model) string {
 
 // LogBlock renders the scrollable log box.
 func (r *Renderer) LogBlock(m *Model) string {
-	content := stTitle.Render("log") + "\n" + m.vp.View()
-	return boxStyle.Width(m.width - boxOverhead).Render(content)
+	inner := m.width - boxOverhead
+	var sb strings.Builder
+	sb.WriteString(stTitle.Render("log") + "\n")
+	sb.WriteString(m.vp.View())
+	if m.blockedEntry != "" {
+		sb.WriteString("\n" + stDim.Render(strings.Repeat("─", inner)))
+		entry := m.blockedEntry
+		if lipgloss.Width(entry) > inner {
+			entry = lipgloss.NewStyle().MaxWidth(inner - 1).Render(entry) + stDim.Render("…")
+		}
+		sb.WriteString("\n" + entry)
+	}
+	return boxStyle.Width(inner).Render(sb.String())
 }
 
 // Hints renders the keybinding footer.

@@ -78,12 +78,13 @@ type Model struct {
 	showDetail       bool
 	statusLockedUntil time.Time
 
-	// blockedLogIdx is the index in m.log of the pending "blocked" entry so that
-	// the EventErrorExplain can patch it in-place instead of adding a second line.
-	// -1 means no pending blocked entry.
-	blockedLogIdx     int
-	blockedTs         string
-	blockedSummary    string
+	// blockedEntry is the active "blocked → explanation" line rendered as a sticky
+	// footer inside the log box (not part of the scrollable viewport). Empty when
+	// there is no active blocked commit. blockedTs/blockedSummary are retained so
+	// EventErrorExplain can reconstruct the full combined line.
+	blockedEntry   string
+	blockedTs      string
+	blockedSummary string
 
 	handlers  *UpdateHandlers
 	presenter *Presenter
@@ -93,11 +94,10 @@ type Model struct {
 // New creates a new UI model for the given config and watcher channels.
 func New(cfg config.Config, events <-chan watcher.Event, cmds chan<- watcher.Cmd) Model {
 	m := Model{
-		cfg:           cfg,
-		events:        events,
-		cmds:          cmds,
-		nextCheck:     time.Now().Add(time.Duration(cfg.Interval * float64(time.Minute))),
-		blockedLogIdx: -1,
+		cfg:       cfg,
+		events:    events,
+		cmds:      cmds,
+		nextCheck: time.Now().Add(time.Duration(cfg.Interval * float64(time.Minute))),
 	}
 	m.presenter = newPresenter(cfg)
 	m.renderer = newRenderer()
@@ -189,6 +189,9 @@ func (m *Model) syncViewport() {
 	if m.width > 0 && m.height > 0 {
 		statusH := lipgloss.Height(m.renderer.Status(m))
 		vpH := m.height - statusH - footerHeight - 3
+		if m.blockedEntry != "" {
+			vpH -= 2 // separator line + blocked entry line
+		}
 		if vpH < 3 {
 			vpH = 3
 		}
@@ -213,9 +216,11 @@ func (m Model) View() string {
 		return "\n  " + stDim.Render("initializing...")
 	}
 	statusBlock := m.renderer.Status(&m)
-	// Recompute vpH here as a safety net for the first render (before any syncViewport call).
-	// After that, m.vp.Height is kept current by syncViewport on every event.
+	// Safety-net recompute for the first render (before any syncViewport call).
 	vpH := m.height - lipgloss.Height(statusBlock) - footerHeight - 3
+	if m.blockedEntry != "" {
+		vpH -= 2
+	}
 	if vpH < 3 {
 		vpH = 3
 	}

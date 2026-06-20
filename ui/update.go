@@ -105,7 +105,7 @@ func (h *UpdateHandlers) HandleEvent(msg eventMsg) tea.Cmd {
 		m.errorFix = ""
 		m.showDetail = false
 		m.statusLockedUntil = time.Time{}
-		m.blockedLogIdx = -1
+		m.blockedEntry = ""
 		if e.Kind == watcher.EventCommit {
 			m.delayCounter = 0
 			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
