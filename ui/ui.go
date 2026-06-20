@@ -34,6 +34,7 @@ const statusBlockHeight = 8
 const boxOverhead = 4
 
 type tickMsg time.Time
+type spinnerMsg time.Time
 type eventMsg watcher.Event
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
@@ -71,11 +72,15 @@ func New(cfg config.Config, events <-chan watcher.Event, cmds chan<- watcher.Cmd
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(secondTick(), listenEvent(m.events))
+	return tea.Batch(secondTick(), spinnerTick(), listenEvent(m.events))
 }
 
 func secondTick() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
+}
+
+func spinnerTick() tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg { return spinnerMsg(t) })
 }
 
 func listenEvent(ch <-chan watcher.Event) tea.Cmd {
@@ -139,9 +144,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.syncViewport()
 
 	case tickMsg:
-		m.spinnerFrame = (m.spinnerFrame + 1) % len(spinnerFrames)
 		m.pulseTick = !m.pulseTick
 		cmds = append(cmds, secondTick())
+
+	case spinnerMsg:
+		m.spinnerFrame = (m.spinnerFrame + 1) % len(spinnerFrames)
+		cmds = append(cmds, spinnerTick())
 
 	case eventMsg:
 		m.applyEvent(watcher.Event(msg))
@@ -241,7 +249,6 @@ func (m *Model) applyEvent(e watcher.Event) {
 		if strings.Contains(e.Message, "diff changed") {
 			m.stabilizing = true
 			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Stabilize * float64(time.Minute)))
-			m.log = append(m.log, ts+"  "+stDim.Render("stabilizing..."))
 		} else if strings.Contains(e.Message, "diff empty") {
 			m.stabilizing = false
 		} else {
