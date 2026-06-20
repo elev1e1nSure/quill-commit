@@ -716,3 +716,95 @@ func TestCommitEngine_Split_SkipsExcludedFiles(t *testing.T) {
 	}
 }
 
+// --- session history tests ---
+
+func TestFormatHistory_Empty(t *testing.T) {
+	w := newTestWatcher(&fakeGit{diffs: []string{"x"}}, &fakeAI{})
+	if h := w.formatHistory("anyhash"); h != "" {
+		t.Fatalf("expected empty history, got %q", h)
+	}
+}
+
+func TestFormatHistory_WithEntries(t *testing.T) {
+	w := newTestWatcher(&fakeGit{diffs: []string{"x"}}, &fakeAI{})
+	w.recordWait("abc", 60, "diff looks incomplete")
+	w.recordWait("abc", 120, "")
+
+	h := w.formatHistory("abc")
+	if !strings.Contains(h, "PRIOR DECISIONS") {
+		t.Error("history should contain PRIOR DECISIONS header")
+	}
+	if !strings.Contains(h, "wait 60s") {
+		t.Error("history should contain first wait entry")
+	}
+	if !strings.Contains(h, `"diff looks incomplete"`) {
+		t.Error("history should contain reason")
+	}
+	if !strings.Contains(h, "wait 120s") {
+		t.Error("history should contain second wait entry")
+	}
+	if !strings.Contains(h, "reviewed 2 time(s)") {
+		t.Error("history should report count")
+	}
+}
+
+func TestSessionHistory_ClearedAfterCommit(t *testing.T) {
+	g := &fakeGit{diffs: []string{"diff-x"}}
+	a := &fakeAI{responses: []ai.Decision{{Commit: true, Message: "feat: x"}}}
+	w := newTestWatcher(g, a)
+	w.prevDiff = "diff-x"
+
+	// Pre-populate history as if a prior wait happened for this diff.
+	hash := diffHash("diff-x")
+	w.recordWait(hash, 60, "was waiting")
+
+	w.tick()
+
+	if w.sessionLog != nil {
+		t.Fatal("sessionLog should be nil after commit")
+	}
+}
+
+// TestSessionHistory_InjectedOnSecondCall verifies that after a "wait" decision,
+// the subsequent model call includes the prior decision in the UserPrompt.
+func TestSessionHistory_InjectedOnSecondCall(t *testing.T) {
+	g := &fakeGit{diffs: []string{"diff-x", "diff-x", "diff-x"}}
+
+	callCount := 0
+	var secondUserPrompt string
+	a := &fakeAI{
+		AskFunc: func(req ai.Request) (ai.Decision, ai.Usage, error) {
+			callCount++
+			if callCount == 2 {
+				secondUserPrompt = req.UserPrompt
+			}
+			if callCount == 1 {
+				return ai.Decision{Commit: false, Delay: 0, Reason: "incomplete work"}, ai.Usage{}, nil
+			}
+			return ai.Decision{Commit: true, Message: "feat: x"}, ai.Usage{}, nil
+		},
+	}
+	w := newTestWatcher(g, a)
+	w.delayLoop("diff-x")
+
+	if callCount < 2 {
+		t.Fatalf("expected at least 2 AI calls, got %d", callCount)
+	}
+	if !strings.Contains(secondUserPrompt, "PRIOR DECISIONS") {
+		t.Errorf("second call should contain history block, got: %q", secondUserPrompt)
+	}
+	if !strings.Contains(secondUserPrompt, "incomplete work") {
+		t.Errorf("second call should contain prior reason, got: %q", secondUserPrompt)
+	}
+}
+
+// TestSessionHistory_DifferentDiffs verifies that history is isolated by diff hash.
+func TestSessionHistory_DifferentDiffs(t *testing.T) {
+	w := newTestWatcher(&fakeGit{diffs: []string{"x"}}, &fakeAI{})
+	w.recordWait(diffHash("diff-a"), 60, "reason a")
+
+	if h := w.formatHistory(diffHash("diff-b")); h != "" {
+		t.Fatalf("history for diff-b should be empty, got %q", h)
+	}
+}
+

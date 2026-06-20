@@ -41,6 +41,8 @@ When a commit is rejected (e.g. pre-commit hook failure), the watcher stores a S
 
 **Split Commits for atomic history.** If a large, stable diff contains several independent changes belonging to different scopes (e.g., a bugfix in one package and unrelated documentation in another), the model can return a list of commit groups. The watcher stages only the specified files for each group and commits them sequentially. Any remaining unassigned files are swept into a final `chore: commit remaining changes` commit.
 
+**Session memory within the delay loop.** Each time the model returns `commit: false`, the decision (timestamp, delay duration, and optional `reason`) is recorded keyed by a SHA-256 fingerprint of the diff. On every subsequent call for the same diff, the full history is prepended to the user prompt as a `PRIOR DECISIONS` block. The model sees what it already concluded and must justify any reversal. History is cleared after every successful commit, so each new change starts with a clean slate.
+
 **Network errors don't count.** A failed API call is not a delay. The counter only increments on explicit `commit: false`. This prevents network flakiness from burning through `max_delays`.
 
 **Force-commit as a safety net.** `max_delays` (if set to > 0) ensures nothing is ever silently lost, even if the model keeps saying "not yet." If `max_delays = 0` (the default), forced commits are disabled, and the watcher will wait indefinitely for the model's approval.
