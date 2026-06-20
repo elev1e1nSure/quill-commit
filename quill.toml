@@ -1,6 +1,6 @@
 interval = 0.1
 stabilize = 0.08
-max_delays = 0
+max_delays = 5
 model = 'deepseek/deepseek-v4-flash'
 include_context = true
 context_budget = 30000
