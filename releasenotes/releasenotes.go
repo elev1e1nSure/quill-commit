@@ -41,7 +41,7 @@ func Generate(ctx context.Context, fromRef, toRef, apiKey, model string, initial
 
 func getCommits(ctx context.Context, fromRef, toRef string) ([]string, error) {
 	arg := fmt.Sprintf("%s..%s", fromRef, toRef)
-	out, err := exec.CommandContext(ctx, "git", "log", "--pretty=format:%s", "--", arg).CombinedOutput()
+	out, err := exec.CommandContext(ctx, "git", "log", "--pretty=format:%s", arg).CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}
