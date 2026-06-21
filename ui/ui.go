@@ -1,10 +1,8 @@
 package ui
 
 import (
-	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -23,10 +21,6 @@ var (
 			BorderForeground(lipgloss.Color("#6C9BD2")).
 			Padding(0, 1)
 )
-
-// statusBlockHeight is the fixed line count of the rendered status block
-// (top border + title + 3 content rows + bottom border = 6).
-const statusBlockHeight = 6
 
 // footerHeight is the single hints line rendered below the log block.
 const footerHeight = 1
@@ -59,7 +53,9 @@ type Model struct {
 	delayCounter int
 	lastCommit   string
 	log          []string
-	vp           viewport.Model
+	vpHeight     int
+	vpWidth      int
+	logOffset    int // index of the first visible log line (for future scrolling)
 	width        int
 	height       int
 	ready        bool
@@ -159,14 +155,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handlers.HandleHeadHash(msg)
 	}
 
-	if m.ready {
-		var vpCmd tea.Cmd
-		m.vp, vpCmd = m.vp.Update(msg)
-		if vpCmd != nil {
-			cmds = append(cmds, vpCmd)
-		}
-	}
-
 	return m, tea.Batch(cmds...)
 }
 
@@ -181,11 +169,6 @@ func (m *Model) syncViewport() {
 	if !m.ready {
 		return
 	}
-	// Always recompute viewport height from the actual rendered status block before
-	// calling GotoBottom. HandleWindowSize stores height using statusBlockHeight (constant)
-	// which is wrong when lastCommit wraps to a second line. A stale height makes
-	// GotoBottom compute a wrong YOffset, causing newest log entries to fall above
-	// the visible area.
 	if m.width > 0 && m.height > 0 {
 		statusH := lipgloss.Height(m.renderer.Status(m))
 		vpH := m.height - statusH - footerHeight - 3
@@ -195,20 +178,12 @@ func (m *Model) syncViewport() {
 		if vpH < 3 {
 			vpH = 3
 		}
-		m.vp.Height = vpH
+		m.vpHeight = vpH
 	}
-	// Clamp each log line to viewport width so nothing wraps and shifts the layout.
-	maxW := m.vp.Width
-	clamped := make([]string, len(m.log))
-	for i, line := range m.log {
-		if lipgloss.Width(line) > maxW {
-			clamped[i] = lipgloss.NewStyle().MaxWidth(maxW - 1).Render(line) + stDim.Render("…")
-		} else {
-			clamped[i] = line
-		}
+	m.logOffset = len(m.log) - m.vpHeight
+	if m.logOffset < 0 {
+		m.logOffset = 0
 	}
-	m.vp.SetContent(strings.Join(clamped, "\n"))
-	m.vp.GotoBottom()
 }
 
 func (m Model) View() string {
@@ -224,7 +199,11 @@ func (m Model) View() string {
 	if vpH < 3 {
 		vpH = 3
 	}
-	m.vp.Height = vpH // local override — value receiver, affects only this render pass
+	m.vpHeight = vpH // local override — value receiver, affects only this render pass
+	m.logOffset = len(m.log) - m.vpHeight
+	if m.logOffset < 0 {
+		m.logOffset = 0
+	}
 
 	middle := m.renderer.LogBlock(&m)
 	if m.showDetail && m.errorRaw != "" {

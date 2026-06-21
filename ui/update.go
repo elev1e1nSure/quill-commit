@@ -3,7 +3,6 @@ package ui
 import (
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"quill-commit/git"
@@ -56,26 +55,17 @@ func (h *UpdateHandlers) HandleKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-// HandleWindowSize initializes or resizes the viewport.
+// HandleWindowSize handles TUI resizing.
 func (h *UpdateHandlers) HandleWindowSize(msg tea.WindowSizeMsg) {
 	m := h.m
 	m.width = msg.Width
 	m.height = msg.Height
-	vpH := m.height - statusBlockHeight - footerHeight - 3 // log block: top border + title + bottom border = 3 overhead
-	if vpH < 3 {
-		vpH = 3
-	}
 	vpW := m.width - boxOverhead
 	if vpW < 10 {
 		vpW = 10
 	}
-	if !m.ready {
-		m.vp = viewport.New(vpW, vpH)
-		m.ready = true
-	} else {
-		m.vp.Width = vpW
-		m.vp.Height = vpH
-	}
+	m.vpWidth = vpW
+	m.ready = true
 	m.syncViewport()
 }
 

@@ -53,7 +53,7 @@ func (r *Renderer) Status(m *Model) string {
 		lastCommit = stDim.Render(dot) + " " + lastCommit
 	}
 
-	// Clamp lastCommit to one line so the status block stays at statusBlockHeight.
+	// Clamp lastCommit to one line so the status block height is predictable.
 	// label(12) + sep(2) + box padding/border(4) = 18 chars overhead.
 	if maxW := m.width - 18; maxW > 4 && lipgloss.Width(lastCommit) > maxW {
 		lastCommit = lipgloss.NewStyle().MaxWidth(maxW - 1).Render(lastCommit) + stDim.Render("…")
@@ -73,9 +73,40 @@ func (r *Renderer) Status(m *Model) string {
 // LogBlock renders the scrollable log box.
 func (r *Renderer) LogBlock(m *Model) string {
 	inner := m.width - boxOverhead
+
+	start := m.logOffset
+	if start < 0 {
+		start = 0
+	}
+	if start > len(m.log) {
+		start = len(m.log)
+	}
+	end := start + m.vpHeight
+	if end > len(m.log) {
+		end = len(m.log)
+	}
+	visibleLines := m.log[start:end]
+
+	renderedLines := make([]string, m.vpHeight)
+	for i := 0; i < m.vpHeight; i++ {
+		if i < len(visibleLines) {
+			renderedLines[i] = visibleLines[i]
+		} else {
+			renderedLines[i] = ""
+		}
+	}
+
+	for i, line := range renderedLines {
+		if lipgloss.Width(line) > m.vpWidth {
+			renderedLines[i] = lipgloss.NewStyle().MaxWidth(m.vpWidth - 1).Render(line) + stDim.Render("…")
+		}
+	}
+
+	logView := strings.Join(renderedLines, "\n")
+
 	var sb strings.Builder
 	sb.WriteString(stTitle.Render("log") + "\n")
-	sb.WriteString(m.vp.View())
+	sb.WriteString(logView)
 	if m.blockedEntry != "" {
 		sb.WriteString("\n" + stDim.Render(strings.Repeat("─", inner)))
 		entry := m.blockedEntry
@@ -117,7 +148,7 @@ func (r *Renderer) DetailOverlay(m *Model) string {
 	sb.WriteString(stTitle.Render("error detail") + "\n")
 
 	lines := strings.Split(m.errorRaw, "\n")
-	maxLines := m.vp.Height
+	maxLines := m.vpHeight
 	if m.errorFix != "" {
 		maxLines -= 3
 	}
