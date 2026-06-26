@@ -10,13 +10,13 @@ import (
 const (
 	DefaultInterval           = 120
 	DefaultStabilize          = 60
-	DefaultMaxDelays          = 0
+	DefaultMaxDelays          = 3
 	DefaultModel              = "deepseek/deepseek-v4-flash"
 	DefaultIncludeContext     = true
 	DefaultContextBudget      = 32000
 	DefaultRecentCommitsCount = 10
 	DefaultStrategy           = "standard"
-	DefaultDelaysEnabled      = false
+	DefaultDelaysEnabled      = true
 	FileName                  = "quill.toml"
 )
 
@@ -65,13 +65,13 @@ func ValidStrategy(s string) bool {
 }
 
 // Delayed reports whether delay requests from the model are enabled.
-// Returns false when DelaysEnabled is nil (default) or explicitly false.
+// Returns true when DelaysEnabled is nil (default) or explicitly true.
 func (c Config) Delayed() bool {
-	return c.DelaysEnabled != nil && *c.DelaysEnabled
+	return c.DelaysEnabled == nil || *c.DelaysEnabled
 }
 
 func Default() Config {
-	delaysEnabled := false
+	delaysEnabled := true
 	return Config{
 		Interval:           DefaultInterval,
 		Stabilize:          DefaultStabilize,

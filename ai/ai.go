@@ -74,7 +74,8 @@ SCOPE — the package, module, or subsystem. Use the directory or package name: 
 
 DESCRIPTION — lowercase, imperative mood, no period. Say WHAT changed, not why.
   Good: "clamp log lines to viewport width before GotoBottom"
-  Bad:  "fix bug", "update stuff", "improve performance", "various changes"
+  Good: "skip delay loop when delays disabled"
+  Bad:  "fix bug", "update stuff", "improve performance", "various changes", "add X and Y and Z"
 
 DECISION RULE — if you are unsure between fix and feat, ask: did something that worked incorrectly now work correctly? → fix. Did something that did not exist now exist? → feat.
 
@@ -83,7 +84,9 @@ PRIOR DECISIONS block: if the user message begins with "PRIOR DECISIONS:", those
 SOLO vs SPLIT:
 - SOLO: changes belong to the same task, feature, or bugfix. Code + its tests + its docs = always SOLO.
 - SPLIT: changes are completely independent, different scopes, can each be reverted alone without breaking anything.
-- When in doubt, default to SOLO.`
+- When in doubt, prefer SPLIT — independent commits are safer to revert and review.
+- TEST FILES: if the diff includes test files and production code, the tests MUST pass. If tests would break due to your changes, skip the commit.
+- If the diff mixes unrelated concerns (e.g. a refactor + a new feature + a bugfix), SPLIT them.`
 
 // PromptForStrategy returns the system prompt for the given commit strategy.
 // When delaysEnabled is false, delay/wait instructions and PRIOR DECISIONS block are omitted.
@@ -172,14 +175,17 @@ SCOPE — the package, module, or subsystem. Use the directory or package name: 
 
 DESCRIPTION — lowercase, imperative mood, no period. Say WHAT changed, not why.
   Good: "clamp log lines to viewport width before GotoBottom"
-  Bad:  "fix bug", "update stuff", "improve performance", "various changes"
+  Good: "skip delay loop when delays disabled"
+  Bad:  "fix bug", "update stuff", "improve performance", "various changes", "add X and Y and Z"
 
 DECISION RULE — if you are unsure between fix and feat, ask: did something that worked incorrectly now work correctly? → fix. Did something that did not exist now exist? → feat.
 
 SOLO vs SPLIT:
 - SOLO: changes belong to the same task, feature, or bugfix. Code + its tests + its docs = always SOLO.
 - SPLIT: changes are completely independent, different scopes, can each be reverted alone without breaking anything.
-- When in doubt, default to SOLO.`
+- When in doubt, prefer SPLIT — independent commits are safer to revert and review.
+- TEST FILES: if the diff includes test files and production code, the tests MUST pass. If tests would break due to your changes, skip the commit.
+- If the diff mixes unrelated concerns (e.g. a refactor + a new feature + a bugfix), SPLIT them.`
 
 type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)
