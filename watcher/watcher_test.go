@@ -15,6 +15,8 @@ import (
 	"quill-commit/git"
 )
 
+var delaysEnabled = true
+
 // --- fakes ---
 
 type fakeGit struct {
@@ -107,7 +109,7 @@ func (f *fakeAI) Ask(req ai.Request) (ai.Decision, ai.Usage, error) {
 }
 
 func newTestWatcher(g *fakeGit, a *fakeAI) *Watcher {
-	cfg := config.Config{Interval: 10, Stabilize: 0, MaxDelays: 3, Model: "test"}
+	cfg := config.Config{Interval: 10, Stabilize: 0, MaxDelays: 3, Model: "test", DelaysEnabled: &delaysEnabled}
 	w := New(context.Background(), cfg, "key", "")
 	w.setGitAI(g, a)
 	w.sleepFn = func(_ time.Duration) {} // mock sleep to be instantaneous
@@ -374,6 +376,7 @@ func TestWatcher_CacheMissesState(t *testing.T) {
 		Model:          "test-model",
 		IncludeContext: true,
 		ContextBudget:  8000,
+		DelaysEnabled:  &delaysEnabled,
 	}
 
 	oldCap := ai.CacheCapabilityFn
@@ -438,6 +441,7 @@ func TestWatcher_IncludeContext_False(t *testing.T) {
 		MaxDelays:      3,
 		Model:          "test-model",
 		IncludeContext: false,
+		DelaysEnabled:  &delaysEnabled,
 	}
 
 	var lastReq ai.Request
