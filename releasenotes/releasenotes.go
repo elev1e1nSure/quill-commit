@@ -15,7 +15,7 @@ var openRouterURL = "https://openrouter.ai/api/v1/chat/completions"
 
 const (
 	dialTimeout = 10 * time.Second
-	readTimeout = 30 * time.Second
+	readTimeout = 60 * time.Second
 )
 
 var client = &http.Client{Timeout: dialTimeout + readTimeout}
@@ -41,11 +41,15 @@ func Generate(ctx context.Context, fromRef, toRef, apiKey, model string, initial
 
 func getCommits(ctx context.Context, fromRef, toRef string) ([]string, error) {
 	arg := fmt.Sprintf("%s..%s", fromRef, toRef)
-	out, err := exec.CommandContext(ctx, "git", "log", "--pretty=format:%s", arg).CombinedOutput()
+	cmd := exec.CommandContext(ctx, "git", "log", "--pretty=format:%s", arg)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
 	}
-	trimmed := strings.TrimSpace(string(out))
+	trimmed := strings.TrimSpace(stdout.String())
 	if trimmed == "" {
 		return nil, nil
 	}

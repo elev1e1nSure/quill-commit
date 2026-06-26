@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -21,10 +22,16 @@ func runGitWithStdin(stdin string, args ...string) (string, error) {
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
-	out, err := cmd.CombinedOutput()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	s := strings.TrimSpace(string(out))
 	if err != nil {
-		return s, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+		errStr := strings.TrimSpace(stderr.String())
+		if errStr == "" {
+			errStr = s
+		}
+		return errStr, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 	return s, nil
 }

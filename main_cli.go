@@ -9,16 +9,17 @@ import (
 
 // CLI holds parsed command-line flags and handles --help / --version / no-args.
 type CLI struct {
-	APIKey    string
-	Model     string
-	Interval  float64
-	Stabilize float64
-	MaxDelays int
-	Preset    string
-	Strategy  string
-	Configure bool
-	Version   bool
-	ShowUsage bool
+	APIKey     string
+	Model      string
+	Interval   float64
+	Stabilize  float64
+	MaxDelays  int
+	Preset     string
+	Strategy   string
+	Configure  bool
+	Version    bool
+	ShowUsage  bool
+	PathAction string
 }
 
 // Parse reads os.Args into CLI. It returns an error only for unknown flags.
@@ -36,11 +37,7 @@ func (c *CLI) Parse() error {
 	strategyFlag := flag.String("strategy", "", "commit strategy: permissive, standard (default), strict")
 	configureFlag := flag.Bool("configure", false, "save settings to quill.toml and exit without starting")
 	versionFlag := flag.Bool("version", false, "print version and exit")
-
-	if len(os.Args) == 1 {
-		c.ShowUsage = true
-		return nil
-	}
+	pathFlag := flag.String("path", "", "add or remove quill-commit from PATH: --path add, --path remove")
 
 	err := flag.CommandLine.Parse(os.Args[1:])
 	if err != nil {
@@ -61,5 +58,6 @@ func (c *CLI) Parse() error {
 	c.Strategy = *strategyFlag
 	c.Configure = *configureFlag
 	c.Version = *versionFlag
+	c.PathAction = strings.ToLower(*pathFlag)
 	return nil
 }

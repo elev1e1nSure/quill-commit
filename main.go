@@ -22,7 +22,8 @@ var (
 func printUsage() {
 	exe := "quill-commit"
 	lines := []string{
-		stTitle.Render("Usage") + ": " + exe + " [flags]",
+		stTitle.Render("Usage") + ": " + exe + "             start watching and auto-committing",
+		"       " + exe + " [flags]     configure settings (does not start the watcher)",
 		"",
 		stTitle.Render("Flags"),
 		"  " + stFlag.Render("--api-key") + " string      OpenRouter API key (saved to credentials file)",
@@ -32,7 +33,7 @@ func printUsage() {
 		"  " + stFlag.Render("--interval") + " float       check interval in minutes",
 		"  " + stFlag.Render("--stabilize") + " float      stabilization re-check interval in minutes",
 		"  " + stFlag.Render("--max-delays") + " int       max delays before forced commit (0 = never force)",
-		"  " + stFlag.Render("--configure") + "            save settings to quill.toml and exit without starting",
+		"  " + stFlag.Render("--path") + " add|remove     add or remove quill-commit from user PATH",
 		"  " + stFlag.Render("--version") + "              print version and exit",
 		"",
 		stTitle.Render("Timing presets"),
@@ -45,8 +46,8 @@ func printUsage() {
 		"  " + stFlag.Render("permissive") + "  " + stMeta.Render("commit everything that passes filters, no quality gating"),
 		"  " + stFlag.Render("strict") + "      " + stMeta.Render("commit only clean, atomic, purposeful changes"),
 		"",
-		stMeta.Render("API key: --api-key flag → QUILL_API_KEY env → credentials file"),
-		stMeta.Render("All flags except --api-key, --configure, --version are saved to quill.toml"),
+		stMeta.Render("Run without flags to start. Flags configure and exit — they never start the watcher."),
+		stMeta.Render("API key: --api-key → QUILL_API_KEY env → credentials file. Other flags saved to quill.toml."),
 	}
 	fmt.Println(strings.Join(lines, "\n"))
 }
@@ -86,8 +87,12 @@ func run() error {
 		return nil
 	}
 
-	// --configure: save settings and exit without starting the watcher.
-	if cli.Configure {
+	if cli.PathAction != "" {
+		return handlePath(cli.PathAction)
+	}
+
+	// Any flags passed → configure and exit.
+	if len(os.Args) > 1 {
 		if cli.APIKey != "" {
 			if err := credentials.Save(cli.APIKey); err != nil {
 				fmt.Fprintf(os.Stderr, "warn: could not save api key: %v\n", err)
@@ -102,13 +107,14 @@ func run() error {
 		return nil
 	}
 
+	// No flags → start watcher.
 	creds := &CredentialResolver{FlagValue: cli.APIKey}
 	apiKey, shouldSave, err := creds.Resolve()
 	if err != nil {
 		return err
 	}
 	if apiKey == "" {
-		return fmt.Errorf("API key required — pass --api-key, set QUILL_API_KEY, or run once with --api-key to save it")
+		return fmt.Errorf("API key required — run quill-commit --api-key <key> first")
 	}
 	if shouldSave {
 		if err := credentials.Save(cli.APIKey); err != nil {

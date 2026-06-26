@@ -26,7 +26,7 @@ type CommitGroup struct {
 
 const (
 	dialTimeout = 10 * time.Second
-	readTimeout = 30 * time.Second
+	readTimeout = 60 * time.Second
 )
 
 const AmendBasePrompt = `You are amending a git commit. Given the original commit message and the additional diff being added to it, write a single updated commit message covering all changes.
