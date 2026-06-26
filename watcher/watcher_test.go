@@ -281,6 +281,7 @@ func TestWatcherSessionID(t *testing.T) {
 		Model:          "test",
 		IncludeContext: true,
 		SessionID:      "explicit-id",
+		DelaysEnabled:  &delaysEnabled,
 	}
 
 	oldCap := ai.CacheCapabilityFn
@@ -318,9 +319,9 @@ func TestWatcher_IncludeContext_HappyPath(t *testing.T) {
 		Model:          "test-model",
 		IncludeContext: true,
 		ContextBudget:  8000,
+		DelaysEnabled:  &delaysEnabled,
 	}
 
-	// Stub out CacheCapability
 	oldCap := ai.CacheCapabilityFn
 	ai.CacheCapabilityFn = func(_, _ string) (bool, error) {
 		return true, nil
