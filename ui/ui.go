@@ -93,7 +93,7 @@ func New(cfg config.Config, events <-chan watcher.Event, cmds chan<- watcher.Cmd
 		cfg:       cfg,
 		events:    events,
 		cmds:      cmds,
-		nextCheck: time.Now().Add(time.Duration(cfg.Interval * float64(time.Minute))),
+		nextCheck: time.Now().Add(time.Duration(cfg.Interval) * time.Second),
 	}
 	m.presenter = newPresenter(cfg)
 	m.renderer = newRenderer()
@@ -173,7 +173,7 @@ func (m *Model) syncViewport() {
 		statusH := lipgloss.Height(m.renderer.Status(m))
 		vpH := m.height - statusH - footerHeight - 3
 		if m.blockedEntry != "" {
-			vpH -= 2 // separator line + blocked entry line
+			vpH -= 1 // blocked entry line
 		}
 		if vpH < 3 {
 			vpH = 3

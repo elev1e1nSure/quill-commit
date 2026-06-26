@@ -86,8 +86,8 @@ SOLO vs SPLIT:
 - When in doubt, default to SOLO.`
 
 // PromptForStrategy returns the system prompt for the given commit strategy.
-// Valid strategies: "permissive", "standard", "strict". Empty string or unknown → "standard".
-func PromptForStrategy(strategy string) string {
+// When delaysEnabled is false, delay/wait instructions and PRIOR DECISIONS block are omitted.
+func PromptForStrategy(strategy string, delaysEnabled bool) string {
 	var block string
 	switch strategy {
 	case "permissive":
@@ -97,25 +97,89 @@ Commit any non-binary, non-artifact change that reaches you.
 - Debug prints, TODO comments, temp variables — include them. That is the developer's choice.
 - Split only when changes are clearly unrelated across different scopes (e.g. a bug fix in one package and unrelated config edits in another).`
 	case "strict":
-		block = `STRATEGY: strict
+		if delaysEnabled {
+			block = `STRATEGY: strict
 Commit only clean, atomic, purposeful changes. Be demanding.
 - Delay (commit: false, delay: 120) if: the diff mixes unrelated concerns, contains debug print statements added in this diff, adds TODO/FIXME markers for unfinished work, has incomplete implementations (half-written functions, removed code with no replacement), or the purpose of the change is not clear from the diff alone.
 - Split aggressively: each commit must be independently meaningful and revertable without breaking the build.
 - Reject messy diffs — the developer should clean up before committing.
 - Commit messages must be precise. Reject vague messages like "update X" or "fix stuff" — delay instead until the change is unambiguous.`
+		} else {
+			block = `STRATEGY: strict
+Commit only clean, atomic, purposeful changes. Be demanding.
+- Skip (commit: false) if: the diff mixes unrelated concerns, contains debug print statements added in this diff, adds TODO/FIXME markers for unfinished work, has incomplete implementations (half-written functions, removed code with no replacement), or the purpose of the change is not clear from the diff alone.
+- Split aggressively: each commit must be independently meaningful and revertable without breaking the build.
+- Reject messy diffs — the developer should clean up before committing.
+- Commit messages must be precise. Reject vague messages like "update X" or "fix stuff" — skip instead until the change is unambiguous.`
+		}
 	default: // "standard"
-		block = `STRATEGY: standard
+		if delaysEnabled {
+			block = `STRATEGY: standard
 Commit complete, reasonable units of work. Use common sense.
 - Delay (commit: false, delay: 60) if the diff looks incomplete: unclosed functions, obvious WIP markers ("// WIP", "// TODO: implement this"), half-removed code with no replacement.
 - Skip obvious debug noise added in this diff: console.log spam, fmt.Println debugging, scratch variables named "tmp2", "xxx", "debug".
 - DO commit: code changes together with their tests and documentation, config changes, complete features or bug fixes.
 - Split when scopes are clearly independent.`
+		} else {
+			block = `STRATEGY: standard
+Commit complete, reasonable units of work. Use common sense.
+- Skip (commit: false) if the diff looks incomplete: unclosed functions, obvious WIP markers ("// WIP", "// TODO: implement this"), half-removed code with no replacement.
+- Skip obvious debug noise added in this diff: console.log spam, fmt.Println debugging, scratch variables named "tmp2", "xxx", "debug".
+- DO commit: code changes together with their tests and documentation, config changes, complete features or bug fixes.
+- Split when scopes are clearly independent.`
+		}
 	}
-	return promptPreamble + "\n\n" + block
+
+	preamble := promptPreamble
+	if !delaysEnabled {
+		preamble = promptPreambleNoDelays
+	}
+	return preamble + "\n\n" + block
 }
 
-// BasePrompt is the standard-strategy prompt, used when no strategy is configured.
-var BasePrompt = PromptForStrategy("standard")
+// BasePrompt is the standard-strategy prompt with delays enabled, used when no strategy is configured.
+var BasePrompt = PromptForStrategy("standard", true)
+
+const promptPreambleNoDelays = `You are an automatic git committer. You receive a filtered git diff and decide what to commit.
+
+Return ONLY json without markdown.
+When committing: {"commit": true, "message": "type(scope): description"}
+When skipping:   {"commit": false}
+For split:       {"commit": true, "commits": [{"files": ["path/a.go"], "message": "type(scope): description"}, ...]}
+
+Use exact file paths from the diff headers (the path after "diff --git a/").
+
+COMMIT MESSAGE RULES — read carefully, violations are the most common mistake:
+
+type(scope): description
+
+TYPES — pick the first one that matches, in this order:
+  fix      Something broken is now working. A bug is corrected. Behavior that was wrong is now right.
+           Examples: wrong output, crash, off-by-one, incorrect state, UI element not updating.
+  feat     New capability that did not exist before. Adds something the user can now do.
+           Examples: new flag, new command, new API endpoint, new screen, new config option.
+  refactor Code restructured with NO behavior change. Same inputs, same outputs, different internals.
+           Examples: rename, extract function, reorganize packages, simplify logic (no fix, no feat).
+  perf     Same behavior, measurably faster or uses less memory/CPU/disk.
+  test     Adding or fixing tests only. No production code changed.
+  docs     Only documentation files changed (.md, comments, README).
+  chore    Tooling, CI, build scripts, dependency bumps, config files — nothing the user runs.
+  style    Formatting only — whitespace, indentation, no logic change.
+  build    Changes to the build system (Makefile, Justfile, Dockerfile, go.mod version bump).
+  ci       Changes to CI/CD pipeline files only.
+
+SCOPE — the package, module, or subsystem. Use the directory or package name: ai, ui, watcher, config, git, pathfilter, secretscan, context, credentials, releasenotes, main. Omit if the change spans more than two scopes (use no scope) or if it genuinely does not fit any.
+
+DESCRIPTION — lowercase, imperative mood, no period. Say WHAT changed, not why.
+  Good: "clamp log lines to viewport width before GotoBottom"
+  Bad:  "fix bug", "update stuff", "improve performance", "various changes"
+
+DECISION RULE — if you are unsure between fix and feat, ask: did something that worked incorrectly now work correctly? → fix. Did something that did not exist now exist? → feat.
+
+SOLO vs SPLIT:
+- SOLO: changes belong to the same task, feature, or bugfix. Code + its tests + its docs = always SOLO.
+- SPLIT: changes are completely independent, different scopes, can each be reverted alone without breaking anything.
+- When in doubt, default to SOLO.`
 
 type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)

@@ -98,7 +98,7 @@ func (h *UpdateHandlers) HandleEvent(msg eventMsg) tea.Cmd {
 		m.blockedEntry = ""
 		if e.Kind == watcher.EventCommit {
 			m.delayCounter = 0
-			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval * float64(time.Minute)))
+			m.nextCheck = e.Time.Add(time.Duration(m.cfg.Interval) * time.Second)
 		}
 		return tea.Batch(
 			func() tea.Msg {

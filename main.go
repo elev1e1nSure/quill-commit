@@ -30,9 +30,10 @@ func printUsage() {
 		"  " + stFlag.Render("--model") + " string         LLM model to use (saved to quill.toml)",
 		"  " + stFlag.Render("--preset") + " string        timing preset: active (default), deep, aggressive",
 		"  " + stFlag.Render("--strategy") + " string      commit strategy: permissive, standard (default), strict",
-		"  " + stFlag.Render("--interval") + " float       check interval in minutes",
-		"  " + stFlag.Render("--stabilize") + " float      stabilization re-check interval in minutes",
+		"  " + stFlag.Render("--interval") + " int         check interval in seconds",
+		"  " + stFlag.Render("--stabilize") + " int        stabilization re-check interval in seconds",
 		"  " + stFlag.Render("--max-delays") + " int       max delays before forced commit (0 = never force)",
+		"  " + stFlag.Render("--delays") + " enable|disable  enable or disable model delay requests",
 		"  " + stFlag.Render("--path") + " add|remove     add or remove quill-commit from user PATH",
 		"  " + stFlag.Render("--version") + "              print version and exit",
 		"",
@@ -53,16 +54,37 @@ func printUsage() {
 }
 
 func printConfigured(cfg config.Config) {
+	delaysState := "enable"
+	if !cfg.Delayed() {
+		delaysState = "disable"
+	}
+	presetLine := ""
+	if cfg.Preset != "" {
+		presetLine = "\n  " + stFlag.Render("preset") + "      " + cfg.Preset
+	}
 	lines := []string{
-		stTitle.Render("quill-commit configured"),
+		stTitle.Render("quill-commit configured") + presetLine,
 		"",
 		"  " + stFlag.Render("model") + "       " + cfg.Model,
 		"  " + stFlag.Render("strategy") + "    " + cfg.Strategy,
-		"  " + stFlag.Render("interval") + "    " + fmt.Sprintf("%.4gm", cfg.Interval),
-		"  " + stFlag.Render("stabilize") + "   " + fmt.Sprintf("%.4gm", cfg.Stabilize),
+		"  " + stFlag.Render("interval") + "    " + formatSec(cfg.Interval),
+		"  " + stFlag.Render("stabilize") + "   " + formatSec(cfg.Stabilize),
 		"  " + stFlag.Render("max-delays") + "  " + fmt.Sprintf("%d", cfg.MaxDelays),
+		"  " + stFlag.Render("delays") + "      " + delaysState,
 	}
 	fmt.Println(strings.Join(lines, "\n"))
+}
+
+func formatSec(s int) string {
+	if s >= 60 {
+		m := s / 60
+		rem := s % 60
+		if rem == 0 {
+			return fmt.Sprintf("%dm", m)
+		}
+		return fmt.Sprintf("%dm %ds", m, rem)
+	}
+	return fmt.Sprintf("%ds", s)
 }
 
 func main() {
@@ -89,6 +111,12 @@ func run() error {
 
 	if cli.PathAction != "" {
 		return handlePath(cli.PathAction)
+	}
+
+	if cli.DelaysAction != "" {
+		if cli.DelaysAction != "enable" && cli.DelaysAction != "disable" {
+			return fmt.Errorf("--delays expects 'enable' or 'disable', got %q", cli.DelaysAction)
+		}
 	}
 
 	// Any flags passed → configure and exit.

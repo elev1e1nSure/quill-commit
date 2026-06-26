@@ -2,35 +2,35 @@ package config
 
 import (
 	"fmt"
-	"math"
 	"os"
 
 	"github.com/pelletier/go-toml/v2"
 )
 
 const (
-	DefaultInterval           = 2.0
-	DefaultStabilize          = DefaultInterval / 2
+	DefaultInterval           = 120
+	DefaultStabilize          = 60
 	DefaultMaxDelays          = 0
 	DefaultModel              = "deepseek/deepseek-v4-flash"
 	DefaultIncludeContext     = true
 	DefaultContextBudget      = 32000
 	DefaultRecentCommitsCount = 10
 	DefaultStrategy           = "standard"
+	DefaultDelaysEnabled      = true
 	FileName                  = "quill.toml"
 )
 
 type Preset struct {
-	Interval  float64
-	Stabilize float64
+	Interval  int
+	Stabilize int
 	MaxDelays int
 	Desc      string
 }
 
 var presets = map[string]Preset{
-	"active":     {Interval: 2, Stabilize: 1, MaxDelays: 3, Desc: "check every 2m, re-check every 1m — active coding sessions"},
-	"deep":       {Interval: 5, Stabilize: 2.5, MaxDelays: 2, Desc: "check every 5m, re-check every 2.5m — long focused work"},
-	"aggressive": {Interval: 0.5, Stabilize: 0.25, MaxDelays: 4, Desc: "check every 30s, re-check every 15s — frequent commits"},
+	"active":     {Interval: 120, Stabilize: 60, MaxDelays: 3, Desc: "check every 2m, re-check every 1m — active coding sessions"},
+	"deep":       {Interval: 300, Stabilize: 150, MaxDelays: 2, Desc: "check every 5m, re-check every 2.5m — long focused work"},
+	"aggressive": {Interval: 30, Stabilize: 15, MaxDelays: 4, Desc: "check every 30s, re-check every 15s — frequent commits"},
 }
 
 func ApplyPreset(cfg *Config, name string) bool {
@@ -41,19 +41,22 @@ func ApplyPreset(cfg *Config, name string) bool {
 	cfg.Interval = p.Interval
 	cfg.Stabilize = p.Stabilize
 	cfg.MaxDelays = p.MaxDelays
+	cfg.Preset = name
 	return true
 }
 
 type Config struct {
-	Interval           float64 `toml:"interval"`
-	Stabilize          float64 `toml:"stabilize"`
-	MaxDelays          int     `toml:"max_delays"`
-	Model              string  `toml:"model"`
-	Strategy           string  `toml:"strategy"`
-	IncludeContext     bool    `toml:"include_context"`
-	ContextBudget      int     `toml:"context_budget"`
-	RecentCommitsCount int     `toml:"recent_commits"`
-	SessionID          string  `toml:"session_id"`
+	Interval           int    `toml:"interval"`
+	Stabilize          int    `toml:"stabilize"`
+	MaxDelays          int    `toml:"max_delays"`
+	Model              string `toml:"model"`
+	Strategy           string `toml:"strategy"`
+	Preset             string `toml:"preset"`
+	IncludeContext     bool   `toml:"include_context"`
+	ContextBudget      int    `toml:"context_budget"`
+	RecentCommitsCount int    `toml:"recent_commits"`
+	SessionID          string `toml:"session_id"`
+	DelaysEnabled      *bool  `toml:"delays_enabled"`
 }
 
 // ValidStrategy reports whether s is a known commit strategy name.
@@ -61,7 +64,14 @@ func ValidStrategy(s string) bool {
 	return s == "permissive" || s == "standard" || s == "strict"
 }
 
+// Delayed reports whether delay requests from the model are enabled.
+// Returns true when DelaysEnabled is nil (default) or explicitly true.
+func (c Config) Delayed() bool {
+	return c.DelaysEnabled == nil || *c.DelaysEnabled
+}
+
 func Default() Config {
+	delaysEnabled := true
 	return Config{
 		Interval:           DefaultInterval,
 		Stabilize:          DefaultStabilize,
@@ -72,6 +82,7 @@ func Default() Config {
 		ContextBudget:      DefaultContextBudget,
 		RecentCommitsCount: DefaultRecentCommitsCount,
 		SessionID:          "",
+		DelaysEnabled:      &delaysEnabled,
 	}
 }
 
@@ -89,11 +100,11 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
 
-	if math.IsNaN(cfg.Interval) || math.IsInf(cfg.Interval, 0) || cfg.Interval <= 0 {
+	if cfg.Interval <= 0 {
 		cfg.Interval = DefaultInterval
 	}
-	if math.IsNaN(cfg.Stabilize) || math.IsInf(cfg.Stabilize, 0) || cfg.Stabilize <= 0 {
-		cfg.Stabilize = cfg.Interval / 2
+	if cfg.Stabilize <= 0 {
+		cfg.Stabilize = DefaultStabilize
 	}
 	if cfg.MaxDelays < 0 {
 		cfg.MaxDelays = DefaultMaxDelays
@@ -109,6 +120,10 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.RecentCommitsCount <= 0 {
 		cfg.RecentCommitsCount = DefaultRecentCommitsCount
+	}
+	if cfg.DelaysEnabled == nil {
+		delaysEnabled := true
+		cfg.DelaysEnabled = &delaysEnabled
 	}
 
 	return cfg, nil

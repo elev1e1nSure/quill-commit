@@ -378,7 +378,53 @@ func (w *Watcher) tick() {
 	}
 	w.prevDiff = newPrevDiff
 
+	if !w.cfg.Delayed() {
+		w.commitNoDelay(stableDiff)
+		return
+	}
+
 	w.delayLoop(stableDiff)
+}
+
+// commitNoDelay asks the model once and either commits or skips — no delay loop, no
+// history tracking, no forced commits. Used when DelaysEnabled is false.
+func (w *Watcher) commitNoDelay(stableDiff string) {
+	req, dynErr := w.ctxMgr.BuildRequest(w.ctx, stableDiff, "")
+	if dynErr != nil {
+		w.emit(EventInfo, fmt.Sprintf("warn: context.BuildDynamic: %s", dynErr))
+	}
+
+	w.emit(EventSending, "asking model")
+	decision, usage, err := w.ai.Ask(req)
+	if err != nil {
+		w.emit(EventError, fmt.Sprintf("ai error (skipping): %s", err))
+		return
+	}
+	w.ctxMgr.UpdateBudget(usage)
+
+	if !decision.Commit {
+		w.emit(EventSkip, fmt.Sprintf("model says skip: %s", decision.Reason))
+		return
+	}
+
+	if len(decision.Commits) > 1 {
+		w.emit(EventDecision, fmt.Sprintf("model says split into %d commits", len(decision.Commits)))
+		if err := w.commitEng.Split(decision.Commits); err != nil {
+			w.blockDiff(stableDiff)
+			w.explainCommitError(err.Error())
+		} else {
+			w.resetAfterCommit()
+		}
+		return
+	}
+
+	w.emit(EventDecision, fmt.Sprintf("model says commit: %s", decision.Message))
+	if err := w.commitEng.Commit(decision.Message); err != nil {
+		w.blockDiff(stableDiff)
+		w.explainCommitError(err.Error())
+	} else {
+		w.resetAfterCommit()
+	}
 }
 
 // delayLoop asks the model and handles commit: false delays without recursion.

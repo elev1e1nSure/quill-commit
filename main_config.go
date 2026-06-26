@@ -32,34 +32,49 @@ func (r *ConfigResolver) Resolve() (cfg config.Config, repoRoot string, err erro
 	}
 
 	dirty := false
+	individualDirty := false
 	if r.CLI.Preset != "" {
 		if !config.ApplyPreset(&cfg, r.CLI.Preset) {
 			return config.Config{}, "", fmt.Errorf("unknown preset %q — valid presets: active, deep, aggressive", r.CLI.Preset)
 		}
 		dirty = true
 	}
-	if r.CLI.Model != "" {
+	if r.CLI.ModelSet {
 		cfg.Model = r.CLI.Model
 		dirty = true
+		individualDirty = true
 	}
-	if r.CLI.Interval > 0 {
+	if r.CLI.IntervalSet {
 		cfg.Interval = r.CLI.Interval
 		dirty = true
+		individualDirty = true
 	}
-	if r.CLI.Stabilize > 0 {
+	if r.CLI.StabilizeSet {
 		cfg.Stabilize = r.CLI.Stabilize
 		dirty = true
+		individualDirty = true
 	}
-	if r.CLI.MaxDelays > 0 {
+	if r.CLI.MaxDelaysSet {
 		cfg.MaxDelays = r.CLI.MaxDelays
 		dirty = true
+		individualDirty = true
 	}
-	if r.CLI.Strategy != "" {
+	if r.CLI.StrategySet {
 		if !config.ValidStrategy(r.CLI.Strategy) {
 			return config.Config{}, "", fmt.Errorf("unknown strategy %q — valid values: permissive, standard, strict", r.CLI.Strategy)
 		}
 		cfg.Strategy = r.CLI.Strategy
 		dirty = true
+		individualDirty = true
+	}
+	if r.CLI.DelaysSet {
+		enabled := r.CLI.DelaysAction == "enable"
+		cfg.DelaysEnabled = &enabled
+		dirty = true
+		individualDirty = true
+	}
+	if individualDirty {
+		cfg.Preset = "custom"
 	}
 	if dirty {
 		if saveErr := config.Save(configPath, cfg); saveErr != nil {

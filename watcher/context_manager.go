@@ -70,10 +70,10 @@ func (cm *ContextManager) BuildRequest(ctx context.Context, diff string, history
 	if cm.cfg.IncludeContext {
 		var dyn gitcontext.Dynamic
 		dyn, dynErr = gitcontext.BuildDynamic(cm.cfg.RecentCommitsCount)
-		sysPrompt = ai.PromptForStrategy(cm.cfg.Strategy) + "\n\n---\n\n" + gitcontext.RenderSystem(cm.static, cm.staticBudget)
+		sysPrompt = ai.PromptForStrategy(cm.cfg.Strategy, cm.cfg.Delayed()) + "\n\n---\n\n" + gitcontext.RenderSystem(cm.static, cm.staticBudget)
 		userPrompt = gitcontext.RenderUser(dyn, diff)
 	} else {
-		sysPrompt = ai.PromptForStrategy(cm.cfg.Strategy)
+		sysPrompt = ai.PromptForStrategy(cm.cfg.Strategy, cm.cfg.Delayed())
 		userPrompt = diff
 	}
 

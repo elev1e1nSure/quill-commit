@@ -25,7 +25,7 @@ func newScheduler(cfg config.Config, cmds <-chan Cmd, tickFn func(), cmdHandler 
 		interval = config.DefaultInterval
 	}
 	return &Scheduler{
-		interval:   time.Duration(interval * float64(time.Minute)),
+		interval:   time.Duration(interval) * time.Second,
 		cmds:       cmds,
 		tickFn:     tickFn,
 		cmdHandler: cmdHandler,

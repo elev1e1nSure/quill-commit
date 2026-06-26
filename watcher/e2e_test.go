@@ -89,7 +89,7 @@ func e2eContains(ss []string, s string) bool {
 func e2eWatcher(t *testing.T, dir string, a aiOps) *Watcher {
 	t.Helper()
 	cfg := config.Config{
-		Interval:  0.1,
+		Interval:  6,
 		Stabilize: 0,
 		MaxDelays: 0,
 		Model:     "test",

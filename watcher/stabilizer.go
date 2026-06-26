@@ -42,7 +42,7 @@ func (st *Stabilizer) Stabilize(prevDiff string, onChange func()) (stableDiff st
 		}
 		st.sleepFn(2 * time.Second)
 		prevDiff = diff
-		st.sleepFn(time.Duration(st.cfg.Stabilize * float64(time.Minute)))
+		st.sleepFn(time.Duration(st.cfg.Stabilize) * time.Second)
 		res, err = st.git.DiffEx(st.repoRoot)
 		if err != nil {
 			return "", "", false
@@ -56,13 +56,13 @@ func (st *Stabilizer) Stabilize(prevDiff string, onChange func()) (stableDiff st
 	return diff, diff, true
 }
 
-func formatDuration(minutes float64) string {
-	d := time.Duration(minutes * float64(time.Minute))
+func formatDuration(seconds int) string {
+	d := time.Duration(seconds) * time.Second
 	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
+		return fmt.Sprintf("%ds", seconds)
 	}
 	m := int(d.Minutes())
-	s := int(d.Seconds()) % 60
+	s := seconds % 60
 	if s == 0 {
 		return fmt.Sprintf("%dm", m)
 	}

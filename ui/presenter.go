@@ -25,7 +25,7 @@ func (p *Presenter) ApplyEvent(m *Model, e watcher.Event) (logEntry string) {
 
 	switch e.Kind {
 	case watcher.EventCheck:
-		m.nextCheck = e.Time.Add(time.Duration(p.cfg.Interval * float64(time.Minute)))
+		m.nextCheck = e.Time.Add(time.Duration(p.cfg.Interval) * time.Second)
 		m.sending = false
 		m.stabilizing = false
 
@@ -57,7 +57,7 @@ func (p *Presenter) ApplyEvent(m *Model, e watcher.Event) (logEntry string) {
 		switch {
 		case strings.Contains(e.Message, "diff changed"):
 			m.stabilizing = true
-			m.nextCheck = e.Time.Add(time.Duration(p.cfg.Stabilize * float64(time.Minute)))
+			m.nextCheck = e.Time.Add(time.Duration(p.cfg.Stabilize) * time.Second)
 			m.statusLockedUntil = e.Time.Add(2 * time.Second)
 		default:
 			m.stabilizing = false
@@ -69,7 +69,7 @@ func (p *Presenter) ApplyEvent(m *Model, e watcher.Event) (logEntry string) {
 
 	case watcher.EventForced:
 		m.delayCounter = 0
-		m.nextCheck = e.Time.Add(time.Duration(p.cfg.Interval * float64(time.Minute)))
+		m.nextCheck = e.Time.Add(time.Duration(p.cfg.Interval) * time.Second)
 		return ts + "  " + stWarn.Render("forced") + "  " + stDim.Render("max delays reached, committing")
 
 	case watcher.EventError:

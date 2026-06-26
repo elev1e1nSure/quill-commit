@@ -33,7 +33,11 @@ func (r *Renderer) Status(m *Model) string {
 	case remaining <= 0:
 		nextStr = spinnerDim + " " + stText.Render("checking...")
 	case m.stabilizing:
-		nextStr = spinnerDim + " " + stText.Render("watching...")
+		durStr := fmt.Sprintf("%ds", int(remaining.Seconds()))
+		if int(remaining.Minutes()) > 0 {
+			durStr = fmt.Sprintf("%dm %ds", int(remaining.Minutes()), int(remaining.Seconds())%60)
+		}
+		nextStr = spinnerDim + " " + stText.Render("watching ("+durStr+")")
 	default:
 		durStr := fmt.Sprintf("%ds", int(remaining.Seconds()))
 		if int(remaining.Minutes()) > 0 {
@@ -60,10 +64,14 @@ func (r *Renderer) Status(m *Model) string {
 	}
 
 	lbl := func(s string) string { return stDim.Render(fmt.Sprintf("%-12s", s)) }
+	delaysRow := stText.Render(fmt.Sprintf("%d / %d", m.delayCounter, m.cfg.MaxDelays))
+	if !m.cfg.Delayed() {
+		delaysRow = stDim.Render("off")
+	}
 	rows := strings.Join([]string{
 		stTitle.Render("info"),
 		lbl("status") + "  " + nextStr,
-		lbl("delays") + "  " + stText.Render(fmt.Sprintf("%d / %d", m.delayCounter, m.cfg.MaxDelays)),
+		lbl("delays") + "  " + delaysRow,
 		lbl("last commit") + "  " + lastCommit,
 	}, "\n")
 
@@ -108,7 +116,6 @@ func (r *Renderer) LogBlock(m *Model) string {
 	sb.WriteString(stTitle.Render("log") + "\n")
 	sb.WriteString(logView)
 	if m.blockedEntry != "" {
-		sb.WriteString("\n" + stDim.Render(strings.Repeat("─", inner)))
 		entry := m.blockedEntry
 		if lipgloss.Width(entry) > inner {
 			entry = lipgloss.NewStyle().MaxWidth(inner - 1).Render(entry) + stDim.Render("…")

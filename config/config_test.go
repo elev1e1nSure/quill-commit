@@ -9,7 +9,7 @@ import (
 func TestDefault(t *testing.T) {
 	cfg := Default()
 	if cfg.Interval != DefaultInterval {
-		t.Errorf("expected Interval %g, got %g", DefaultInterval, cfg.Interval)
+		t.Errorf("expected Interval %d, got %d", DefaultInterval, cfg.Interval)
 	}
 	if cfg.MaxDelays != DefaultMaxDelays {
 		t.Errorf("expected MaxDelays %d, got %d", DefaultMaxDelays, cfg.MaxDelays)
@@ -37,7 +37,7 @@ func TestLoadCreatesDefault(t *testing.T) {
 		t.Fatalf("expected no error for nonexistent file, got %v", err)
 	}
 	if cfg.Interval != DefaultInterval {
-		t.Errorf("expected default interval, got %g", cfg.Interval)
+		t.Errorf("expected default interval, got %d", cfg.Interval)
 	}
 }
 
@@ -71,7 +71,7 @@ func TestSaveAndLoad(t *testing.T) {
 		t.Fatalf("load failed: %v", err)
 	}
 	if loaded.Interval != cfg.Interval {
-		t.Errorf("interval mismatch: got %g", loaded.Interval)
+		t.Errorf("interval mismatch: got %d", loaded.Interval)
 	}
 	if loaded.MaxDelays != cfg.MaxDelays {
 		t.Errorf("maxDelays mismatch: got %d", loaded.MaxDelays)
@@ -103,7 +103,7 @@ func TestLoadDefaultsInvalidValues(t *testing.T) {
 		t.Fatalf("load failed: %v", err)
 	}
 	if cfg.Interval != DefaultInterval {
-		t.Errorf("expected default interval, got %g", cfg.Interval)
+		t.Errorf("expected default interval, got %d", cfg.Interval)
 	}
 	if cfg.MaxDelays != DefaultMaxDelays {
 		t.Errorf("expected default maxDelays, got %d", cfg.MaxDelays)
