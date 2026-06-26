@@ -32,7 +32,7 @@ func printUsage() {
 		"  " + stFlag.Render("--strategy") + " string      commit strategy: permissive, standard (default), strict",
 		"  " + stFlag.Render("--interval") + " int         check interval in seconds",
 		"  " + stFlag.Render("--stabilize") + " int        stabilization re-check interval in seconds",
-		"  " + stFlag.Render("--max-delays") + " int       max delays before forced commit (0 = never force)",
+		"  " + stFlag.Render("--max-delays") + " int       max delays before forced commit (3 by default)",
 		"  " + stFlag.Render("--delays") + " enable|disable  enable or disable model delay requests",
 		"  " + stFlag.Render("--path") + " add|remove     add or remove quill-commit from user PATH",
 		"  " + stFlag.Render("--version") + "              print version and exit",

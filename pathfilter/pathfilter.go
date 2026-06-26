@@ -29,6 +29,7 @@ var defaultExcludePatterns = []string{
 	"secrets*",
 	// Compiled binaries and build artifacts
 	"*.exe",
+	"*.exe~",
 	"*.dll",
 	"*.so",
 	"*.dylib",
