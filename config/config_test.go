@@ -172,3 +172,23 @@ func TestLoadContextDefaults(t *testing.T) {
 		t.Errorf("expected RecentCommitsCount default %d for -1, got %d", DefaultRecentCommitsCount, cfg3.RecentCommitsCount)
 	}
 }
+
+func TestLoadMigrateLegacyFloats(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "quill.toml")
+	if err := os.WriteFile(tmp, []byte("interval = 2.0\nstabilize = 1.5\nmax_delays = 3\n"), 0600); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+	cfg, err := Load(tmp)
+	if err != nil {
+		t.Fatalf("load legacy floats: %v", err)
+	}
+	if cfg.Interval != 120 {
+		t.Errorf("expected interval 120 (2.0 min * 60), got %d", cfg.Interval)
+	}
+	if cfg.Stabilize != 90 {
+		t.Errorf("expected stabilize 90 (1.5 min * 60), got %d", cfg.Stabilize)
+	}
+	if cfg.MaxDelays != 3 {
+		t.Errorf("expected max_delays 3, got %d", cfg.MaxDelays)
+	}
+}

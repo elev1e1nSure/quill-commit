@@ -18,8 +18,8 @@ const (
 )
 
 var (
-	user32             = syscall.NewLazyDLL("user32.dll")
-	procSendMessageTO  = user32.NewProc("SendMessageTimeoutW")
+	user32            = syscall.NewLazyDLL("user32.dll")
+	procSendMessageTO = user32.NewProc("SendMessageTimeoutW")
 )
 
 func handlePath(action string) error {
@@ -50,7 +50,7 @@ func handlePath(action string) error {
 	switch action {
 	case "add":
 		if contains(entries, exeDir) {
-			fmt.Printf("%s is already in PATH\n", exeDir)
+			fmt.Println(stFlag.Render(exeDir) + " " + stMeta.Render("is already in PATH"))
 			return nil
 		}
 		entries = append(entries, exeDir)
@@ -60,7 +60,8 @@ func handlePath(action string) error {
 			return fmt.Errorf("cannot write PATH to registry: %w", err)
 		}
 
-		fmt.Printf("Added %s to user PATH\n", exeDir)
+		fmt.Println(stTitle.Render("Added") + " " + stFlag.Render(exeDir) + " " + stMeta.Render("to user PATH"))
+		defer printPathRefresh(exeDir)
 
 	case "remove":
 		filtered := make([]string, 0, len(entries))
@@ -70,7 +71,7 @@ func handlePath(action string) error {
 			}
 		}
 		if len(filtered) == len(entries) {
-			fmt.Printf("%s was not in PATH\n", exeDir)
+			fmt.Println(stFlag.Render(exeDir) + " " + stMeta.Render("was not in PATH"))
 			return nil
 		}
 		newPath = strings.Join(filtered, string(os.PathListSeparator))
@@ -79,7 +80,7 @@ func handlePath(action string) error {
 			return fmt.Errorf("cannot write PATH to registry: %w", err)
 		}
 
-		fmt.Printf("Removed %s from user PATH\n", exeDir)
+		fmt.Println(stTitle.Render("Removed") + " " + stFlag.Render(exeDir) + " " + stMeta.Render("from user PATH"))
 	}
 
 	broadcastEnvChange()
@@ -127,4 +128,12 @@ func broadcastEnvChange() {
 		uintptr(5000),
 		uintptr(0),
 	)
+}
+
+func printPathRefresh(dir string) {
+	fmt.Println()
+	fmt.Println(stMeta.Render("New terminals will pick up the PATH automatically."))
+	fmt.Println(stMeta.Render("To use quill-commit in this terminal, run:"))
+	fmt.Println()
+	fmt.Println("  " + stFlag.Render("$env:Path") + stMeta.Render(" += ") + stFlag.Render("\";"+dir+"\""))
 }

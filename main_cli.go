@@ -20,6 +20,7 @@ type CLI struct {
 	ShowUsage     bool
 	PathAction    string
 	DelaysAction  string
+	Reset         bool
 	IntervalSet   bool
 	StabilizeSet  bool
 	MaxDelaysSet  bool
@@ -45,6 +46,7 @@ func (c *CLI) Parse() error {
 	versionFlag := flag.Bool("version", false, "print version and exit")
 	pathFlag := flag.String("path", "", "add or remove quill-commit from PATH: --path add, --path remove")
 	delaysFlag := flag.String("delays", "", "enable or disable model delay requests: --delays enable, --delays disable")
+	resetFlag := flag.Bool("reset", false, "reset all settings to defaults")
 
 	err := flag.CommandLine.Parse(os.Args[1:])
 	if err != nil {
@@ -66,6 +68,7 @@ func (c *CLI) Parse() error {
 	c.Version = *versionFlag
 	c.PathAction = strings.ToLower(*pathFlag)
 	c.DelaysAction = strings.ToLower(*delaysFlag)
+	c.Reset = *resetFlag
 
 	flag.Visit(func(f *flag.Flag) {
 		switch f.Name {

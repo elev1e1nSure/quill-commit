@@ -24,7 +24,7 @@ func (r *CredentialResolver) Resolve() (apiKey string, shouldSave bool, err erro
 	}
 	stored, loadErr := credentials.Load()
 	if loadErr != nil {
-		fmt.Fprintf(os.Stderr, "warn: could not read credentials: %v\n", loadErr)
+		fmt.Fprintf(os.Stderr, "%s %v\n", stWarn.Render("warn:"), loadErr)
 		return "", false, nil
 	}
 	return stored, false, nil

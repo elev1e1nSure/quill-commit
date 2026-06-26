@@ -70,6 +70,7 @@ func (r *Renderer) Status(m *Model) string {
 	}
 	rows := strings.Join([]string{
 		stTitle.Render("info"),
+		lbl("model") + "  " + stText.Render(shortModel(m.cfg.Model)),
 		lbl("status") + "  " + nextStr,
 		lbl("delays") + "  " + delaysRow,
 		lbl("last commit") + "  " + lastCommit,
@@ -187,4 +188,11 @@ func (r *Renderer) DetailOverlay(m *Model) string {
 // JoinView composes the three blocks vertically.
 func (r *Renderer) JoinView(parts ...string) string {
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
+func shortModel(full string) string {
+	if idx := strings.LastIndex(full, "/"); idx >= 0 {
+		return full[idx+1:]
+	}
+	return full
 }

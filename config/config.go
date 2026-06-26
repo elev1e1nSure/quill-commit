@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/pelletier/go-toml/v2"
@@ -28,9 +29,9 @@ type Preset struct {
 }
 
 var presets = map[string]Preset{
-	"active":     {Interval: 120, Stabilize: 60, MaxDelays: 3, Desc: "check every 2m, re-check every 1m — active coding sessions"},
-	"deep":       {Interval: 300, Stabilize: 150, MaxDelays: 2, Desc: "check every 5m, re-check every 2.5m — long focused work"},
-	"aggressive": {Interval: 30, Stabilize: 15, MaxDelays: 4, Desc: "check every 30s, re-check every 15s — frequent commits"},
+	"active":     {Interval: 120, Stabilize: 30, MaxDelays: 5, Desc: "every 2m, stabilize 30s, max 5 delays — active coding"},
+	"deep":       {Interval: 300, Stabilize: 60, MaxDelays: 4, Desc: "every 5m, stabilize 1m, max 4 delays — focused work"},
+	"aggressive": {Interval: 20, Stabilize: 10, MaxDelays: 5, Desc: "every 20s, stabilize 10s, max 5 delays — rapid commits"},
 }
 
 func ApplyPreset(cfg *Config, name string) bool {
@@ -97,7 +98,11 @@ func Load(path string) (Config, error) {
 
 	cfg := Default()
 	if err := toml.Unmarshal(data, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parse config: %w", err)
+		if migrated, migErr := migrateLegacyFloats(data); migErr == nil {
+			cfg = migrated
+		} else {
+			return Config{}, fmt.Errorf("parse config: %w", err)
+		}
 	}
 
 	if cfg.Interval <= 0 {
@@ -124,6 +129,83 @@ func Load(path string) (Config, error) {
 	if cfg.DelaysEnabled == nil {
 		delaysEnabled := true
 		cfg.DelaysEnabled = &delaysEnabled
+	}
+
+	return cfg, nil
+}
+
+// migrateLegacyFloats tries to load a config that was written when
+// interval/stabilize were float64 (old format). Converts float values
+// to int seconds and returns the migrated config.
+func migrateLegacyFloats(data []byte) (Config, error) {
+	var raw map[string]any
+	if err := toml.Unmarshal(data, &raw); err != nil {
+		return Config{}, err
+	}
+
+	cfg := Default()
+
+	if v, ok := raw["interval"]; ok {
+		switch val := v.(type) {
+		case float64:
+			cfg.Interval = int(math.Round(val * 60))
+		case int64:
+			cfg.Interval = int(val)
+		}
+	}
+	if v, ok := raw["stabilize"]; ok {
+		switch val := v.(type) {
+		case float64:
+			cfg.Stabilize = int(math.Round(val * 60))
+		case int64:
+			cfg.Stabilize = int(val)
+		}
+	}
+	if v, ok := raw["max_delays"]; ok {
+		if val, ok := v.(int64); ok {
+			cfg.MaxDelays = int(val)
+		}
+	}
+	if v, ok := raw["model"]; ok {
+		if val, ok := v.(string); ok {
+			cfg.Model = val
+		}
+	}
+	if v, ok := raw["strategy"]; ok {
+		if val, ok := v.(string); ok {
+			cfg.Strategy = val
+		}
+	}
+	if v, ok := raw["preset"]; ok {
+		if val, ok := v.(string); ok {
+			cfg.Preset = val
+		}
+	}
+	if v, ok := raw["include_context"]; ok {
+		if val, ok := v.(bool); ok {
+			cfg.IncludeContext = val
+		}
+	}
+	if v, ok := raw["context_budget"]; ok {
+		if val, ok := v.(int64); ok {
+			cfg.ContextBudget = int(val)
+		}
+	}
+	if v, ok := raw["recent_commits"]; ok {
+		if val, ok := v.(int64); ok {
+			cfg.RecentCommitsCount = int(val)
+		}
+	}
+	if v, ok := raw["session_id"]; ok {
+		if val, ok := v.(string); ok {
+			cfg.SessionID = val
+		}
+	}
+	if v, ok := raw["delays_enabled"]; ok {
+		if val, ok := v.(bool); ok {
+			b := val
+			cfg.DelaysEnabled = &b
+		}
 	}
 
 	return cfg, nil

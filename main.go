@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 
 	"quill-commit/config"
 	"quill-commit/credentials"
+	"quill-commit/git"
 )
 
 var version = "dev"
@@ -17,6 +19,7 @@ var (
 	stTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#6C9BD2")).Bold(true)
 	stFlag  = lipgloss.NewStyle().Foreground(lipgloss.Color("#D4D4D4"))
 	stMeta  = lipgloss.NewStyle().Foreground(lipgloss.Color("#808080"))
+	stWarn  = lipgloss.NewStyle().Foreground(lipgloss.Color("#D4A82A"))
 )
 
 func printUsage() {
@@ -36,11 +39,12 @@ func printUsage() {
 		"  " + stFlag.Render("--delays") + " enable|disable  enable or disable model delay requests",
 		"  " + stFlag.Render("--path") + " add|remove     add or remove quill-commit from user PATH",
 		"  " + stFlag.Render("--version") + "              print version and exit",
+		"  " + stFlag.Render("--reset") + "               reset all settings to defaults",
 		"",
 		stTitle.Render("Timing presets"),
-		"  " + stFlag.Render("active") + "      " + stMeta.Render("interval=2m  stabilize=1m   max_delays=3  — active coding (default)"),
-		"  " + stFlag.Render("deep") + "        " + stMeta.Render("interval=5m  stabilize=2.5m max_delays=2  — long focused work"),
-		"  " + stFlag.Render("aggressive") + "  " + stMeta.Render("interval=30s stabilize=15s  max_delays=4  — frequent commits"),
+		"  " + stFlag.Render("active") + "      " + stMeta.Render("interval=2m  stabilize=30s  max_delays=5  — active coding (default)"),
+		"  " + stFlag.Render("deep") + "        " + stMeta.Render("interval=5m  stabilize=1m   max_delays=4  — focused work"),
+		"  " + stFlag.Render("aggressive") + "  " + stMeta.Render("interval=20s stabilize=10s  max_delays=5  — rapid commits"),
 		"",
 		stTitle.Render("Commit strategies"),
 		"  " + stFlag.Render("standard") + "    " + stMeta.Render("commit complete, reasonable units of work (default)"),
@@ -87,9 +91,32 @@ func formatSec(s int) string {
 	return fmt.Sprintf("%ds", s)
 }
 
+func handleReset() error {
+	repoRoot, err := git.RepoRoot()
+	if err != nil {
+		return fmt.Errorf("not in a git repository")
+	}
+	configPath := filepath.Join(repoRoot, config.FileName)
+	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove config: %w", err)
+	}
+	cfg, created, err := config.EnsureDefault(configPath)
+	if err != nil {
+		return err
+	}
+	if created {
+		fmt.Println(stMeta.Render("created " + configPath + " with defaults"))
+	} else {
+		fmt.Println(stMeta.Render("reset " + configPath + " to defaults"))
+	}
+	fmt.Println()
+	printConfigured(cfg)
+	return nil
+}
+
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s %v\n", stWarn.Render("error:"), err)
 		os.Exit(1)
 	}
 }
@@ -105,8 +132,12 @@ func run() error {
 		return nil
 	}
 	if cli.Version {
-		fmt.Println("quill-commit", version)
+		fmt.Println(stTitle.Render("quill-commit"), version)
 		return nil
+	}
+
+	if cli.Reset {
+		return handleReset()
 	}
 
 	if cli.PathAction != "" {
@@ -123,7 +154,7 @@ func run() error {
 	if len(os.Args) > 1 {
 		if cli.APIKey != "" {
 			if err := credentials.Save(cli.APIKey); err != nil {
-				fmt.Fprintf(os.Stderr, "warn: could not save api key: %v\n", err)
+				fmt.Fprintf(os.Stderr, "%s %v\n", stWarn.Render("warn:"), err)
 			}
 		}
 		cfgResolver := &ConfigResolver{CLI: *cli}
@@ -146,7 +177,7 @@ func run() error {
 	}
 	if shouldSave {
 		if err := credentials.Save(cli.APIKey); err != nil {
-			fmt.Fprintf(os.Stderr, "warn: could not save api key: %v\n", err)
+			fmt.Fprintf(os.Stderr, "%s %v\n", stWarn.Render("warn:"), err)
 		}
 	}
 

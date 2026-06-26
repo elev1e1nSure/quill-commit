@@ -28,7 +28,7 @@ func (r *ConfigResolver) Resolve() (cfg config.Config, repoRoot string, err erro
 		return config.Config{}, "", err
 	}
 	if created {
-		fmt.Printf("created %s with defaults\n", configPath)
+		fmt.Println(stMeta.Render("created " + configPath + " with defaults"))
 	}
 
 	dirty := false
@@ -78,7 +78,7 @@ func (r *ConfigResolver) Resolve() (cfg config.Config, repoRoot string, err erro
 	}
 	if dirty {
 		if saveErr := config.Save(configPath, cfg); saveErr != nil {
-			fmt.Fprintf(os.Stderr, "warn: could not save config: %v\n", saveErr)
+			fmt.Fprintf(os.Stderr, "%s %v\n", stWarn.Render("warn:"), saveErr)
 		}
 	}
 
