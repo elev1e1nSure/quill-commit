@@ -479,6 +479,7 @@ func TestWatcher_BuildDynamic_Fail(t *testing.T) {
 		MaxDelays:      3,
 		Model:          "test-model",
 		IncludeContext: true,
+		DelaysEnabled:  &delaysEnabled,
 	}
 
 	oldCap := ai.CacheCapabilityFn
@@ -523,6 +524,7 @@ func TestWatcher_BuildStatic_Fail(t *testing.T) {
 		MaxDelays:      3,
 		Model:          "test-model",
 		IncludeContext: true,
+		DelaysEnabled:  &delaysEnabled,
 	}
 
 	oldCap := ai.CacheCapabilityFn
