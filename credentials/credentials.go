@@ -10,7 +10,9 @@ import (
 
 const appName = "quill-commit"
 
-func credPath() (string, error) {
+// Dir returns the per-user quill-commit config directory
+// (%APPDATA%\quill-commit on Windows, ~/.config/quill-commit elsewhere).
+func Dir() (string, error) {
 	var base string
 	if runtime.GOOS == "windows" {
 		base = os.Getenv("APPDATA")
@@ -24,7 +26,15 @@ func credPath() (string, error) {
 		}
 		base = filepath.Join(home, ".config")
 	}
-	return filepath.Join(base, appName, "credentials"), nil
+	return filepath.Join(base, appName), nil
+}
+
+func credPath() (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "credentials"), nil
 }
 
 func Save(apiKey string) error {

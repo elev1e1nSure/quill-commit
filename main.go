@@ -144,6 +144,8 @@ func run() error {
 		return handlePath(cli.PathAction)
 	}
 
+	ensurePathOnFirstRun()
+
 	if cli.DelaysAction != "" {
 		if cli.DelaysAction != "enable" && cli.DelaysAction != "disable" {
 			return fmt.Errorf("--delays expects 'enable' or 'disable', got %q", cli.DelaysAction)

@@ -9,6 +9,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows/registry"
+
+	"quill-commit/credentials"
 )
 
 const (
@@ -85,6 +87,75 @@ func handlePath(action string) error {
 
 	broadcastEnvChange()
 	os.Setenv("PATH", newPath)
+
+	return nil
+}
+
+// ensurePathOnFirstRun silently adds the executable's directory to the user
+// PATH the very first time quill-commit ever runs, so it can be invoked from
+// any shell afterwards. Guarded by a marker file — best-effort, never blocks
+// startup on failure.
+func ensurePathOnFirstRun() {
+	marker, err := firstRunMarkerPath()
+	if err != nil {
+		return
+	}
+	if _, err := os.Stat(marker); err == nil {
+		return
+	}
+
+	if err := addExeToPathSilently(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s %v\n", stWarn.Render("warn:"), err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(marker), 0700); err != nil {
+		return
+	}
+	_ = os.WriteFile(marker, []byte("1"), 0600)
+}
+
+func firstRunMarkerPath() (string, error) {
+	dir, err := credentials.Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "path-initialized"), nil
+}
+
+func addExeToPathSilently() error {
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("cannot resolve executable path: %w", err)
+	}
+	exeDir := filepath.Dir(exePath)
+
+	key, err := registry.OpenKey(registry.CURRENT_USER, `Environment`, registry.QUERY_VALUE|registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("cannot open HKCU\\Environment: %w", err)
+	}
+	defer key.Close()
+
+	currentPath, _, err := key.GetStringValue("PATH")
+	if err != nil && err != registry.ErrNotExist {
+		return fmt.Errorf("cannot read PATH from registry: %w", err)
+	}
+
+	entries := splitPath(currentPath)
+	if contains(entries, exeDir) {
+		return nil
+	}
+	entries = append(entries, exeDir)
+	newPath := strings.Join(entries, string(os.PathListSeparator))
+
+	if err := key.SetStringValue("PATH", newPath); err != nil {
+		return fmt.Errorf("cannot write PATH to registry: %w", err)
+	}
+
+	broadcastEnvChange()
+	os.Setenv("PATH", newPath)
+
+	fmt.Println(stTitle.Render("Added") + " " + stFlag.Render(exeDir) + " " + stMeta.Render("to user PATH (first run)"))
+	printPathRefresh(exeDir)
 
 	return nil
 }
