@@ -79,6 +79,7 @@ main.go      Flag parsing, credential/config resolution, wire everything togethe
 main_cli.go         CLI struct and Parse()
 main_credentials.go CredentialResolver (flag → env → file)
 main_config.go      ConfigResolver (load quill.toml, apply preset/overrides, persist)
+main_configpath.go  per-repo quill.toml path resolution under %APPDATA%\quill-commit\configs
 main_app.go         App struct that starts Watcher + TUI
 ```
 

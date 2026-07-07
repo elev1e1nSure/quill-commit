@@ -22,7 +22,13 @@ func (r *ConfigResolver) Resolve() (cfg config.Config, repoRoot string, err erro
 		return config.Config{}, "", fmt.Errorf("get git repo root: %w", err)
 	}
 
-	configPath := filepath.Join(repoRoot, config.FileName)
+	configPath, err := configPathForRepo(repoRoot)
+	if err != nil {
+		return config.Config{}, "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+		return config.Config{}, "", fmt.Errorf("create config dir: %w", err)
+	}
 	cfg, created, err := config.EnsureDefault(configPath)
 	if err != nil {
 		return config.Config{}, "", err

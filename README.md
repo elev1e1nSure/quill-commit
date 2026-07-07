@@ -92,7 +92,7 @@ The TUI shows the current state, next-check timer, retry counter, and a scrollab
 
 ## Configuration
 
-`quill.toml` is created automatically in your repo root on first run:
+`quill.toml` is created automatically on first run, stored per-repo under `%APPDATA%\quill-commit\configs` (not in the repo itself):
 
 ```toml
 model            = "deepseek/deepseek-v4-flash"

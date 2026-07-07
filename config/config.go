@@ -18,7 +18,6 @@ const (
 	DefaultRecentCommitsCount = 10
 	DefaultStrategy           = "standard"
 	DefaultDelaysEnabled      = true
-	FileName                  = "quill.toml"
 )
 
 type Preset struct {

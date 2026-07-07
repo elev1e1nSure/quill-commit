@@ -96,7 +96,13 @@ func handleReset() error {
 	if err != nil {
 		return fmt.Errorf("not in a git repository")
 	}
-	configPath := filepath.Join(repoRoot, config.FileName)
+	configPath, err := configPathForRepo(repoRoot)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
 	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove config: %w", err)
 	}
